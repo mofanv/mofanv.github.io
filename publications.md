@@ -4,20 +4,26 @@ title: Publications
 permalink: /publications/
 order: 2
 ---
-### Preprint
-**Fan Mo**, Mohammad Malekzadeh, Soumyajit Chatterjee, Fahim Kawsar, Akhil Mathur. "Centaur: Federated Learning for Constrained Edge Devices". *arXiv preprint*. [Paper](https://arxiv.org/abs/2211.04175)
+### 2025
+Xiaohu Du, **Fan Mo**, Ming Wen, Tu Gu, Huadi Zheng, Hai Jin, Jie Shi. "Multi-Turn Jailbreaking Large Language Models via Attention Shifting". *[The 39th Annual AAAI Conference on Artificial Intelligence](https://aaai.org/conference/aaai/aaai-25/)*. Paper on the way!
 
-**Fan Mo**, Zahra Tarkhani, Hamed Haddadi. "SoK: Machine Learning with Confidential Computing". *arXiv preprint*. [Paper](https://arxiv.org/abs/2208.10134)
+### 2024
+**Fan Mo**, Zahra Tarkhani, Hamed Haddadi. "Machine Learning with Confidential Computing: A Systematization of Knowledge." *[ACM Computing Surveys](https://dl.acm.org/journal/csur).*[Paper](https://dl.acm.org/doi/10.1145/3670007) (2023 Impact Factor: 23.8)
 
-**Fan Mo**, Anastasia Borovykh, Mohammad Malekzadeh, Soteris Demetriou, Deniz Gündüz, Hamed Haddadi. "Quantifying and Localizing Usable Information Leakage from Neural Network Gradients". *arXiv preprint*. [Paper](https://arxiv.org/abs/2105.13929)
+Mengjia Niu, Hao Li, Jie Shi, Hamed Haddadi, **Fan Mo**, "Mitigating Hallucinations in Large Language Models via Self-Refinement-Enhanced Knowledge Retrieval." Accepted to *[ACM SIGIR 2024 Workshop Gen-IR](https://coda.io/@sigir/gen-ir-24).* [Paper](https://arxiv.org/abs/2405.06545)
 
+
+### 2023
+Mathias Brossard, Guilhem Bryant, Basma El Gaabouri, Xinxin Fan, Alexandre Ferreira, Edmund Grimley-Evans, Christopher Haster, Evan Johnson, Derek Miller, **Fan Mo**, Dominic P. Mulligan, Nick Spinale, Eric van Hensbergen, Hugo J. M. Vincent, Shale Xiong. "Private delegated computations using strong isolation". *arXiv preprint*. [Paper](https://arxiv.org/abs/2205.03322)
 
 ### 2022
 **Fan Mo**, Hamed Haddadi, Kleomenis Katevas, Eduard Marin, Diego Perino, Nicolas Kourtellis. "PPFL: Enhancing Privacy in Federated Learning with Confidential Computing." Accepted to *[ACM GetMobile 2022](https://dl.acm.org/newsletter/sigmobile-getmobile).* [Paper](https://dl.acm.org/doi/abs/10.1145/3529706.3529715) or [Here](https://mofanv.github.io/papers/ppfl_2022.pdf) (Highlights)
 
-Mathias Brossard, Guilhem Bryant, Basma El Gaabouri, Xinxin Fan, Alexandre Ferreira, Edmund Grimley-Evans, Christopher Haster, Evan Johnson, Derek Miller, **Fan Mo**, Dominic P. Mulligan, Nick Spinale, Eric van Hensbergen, Hugo J. M. Vincent, Shale Xiong. "Private delegated computations using strong isolation". *arXiv preprint*. [Paper](https://arxiv.org/abs/2205.03322)
-
 Yuchen Zhao, Sayed Saad Afzal, Waleed Akbar, Osvy Rodriguez, **Fan Mo**, David Boyle, Fadel Adib, Hamed Haddadi. "Towards Battery-Free Machine Learning and Inference in Underwater Environments", *The 23rd Annual International Workshop on Mobile Computing Systems and Applications ([ACM HotMobile 2022](https://hotmobile.org/2022/)), March 9-10, 2022, Tempe, Arizona, USA.* [Paper](https://arxiv.org/abs/2202.08174)
+
+**Fan Mo**, Mohammad Malekzadeh, Soumyajit Chatterjee, Fahim Kawsar, Akhil Mathur. "Centaur: Federated Learning for Constrained Edge Devices". *arXiv preprint*. [Paper](https://arxiv.org/abs/2211.04175)
+
+**Fan Mo**, Anastasia Borovykh, Mohammad Malekzadeh, Soteris Demetriou, Deniz Gündüz, Hamed Haddadi. "Quantifying and Localizing Usable Information Leakage from Neural Network Gradients". *arXiv preprint*. [Paper](https://arxiv.org/abs/2105.13929)
 
 ### 2021
 **Fan Mo**, Hamed Haddadi, Kleomenis Katevas, Eduard Marin, Diego Perino, Nicolas Kourtellis. "PPFL: Privacy-preserving Federated Learning with Trusted Execution Environments." Accepted to *[ACM MobiSys 2021](https://www.sigmobile.org/mobisys/2021/), Mars, Solar System, Milky Way, June 2021.* [Paper](http://arxiv.org/abs/2104.14380), [Codes](https://github.com/mofanv/PPFL), [Teaser Video](https://www.youtube.com/watch?v=pBtsA0NGDzs), [Full Video](https://www.youtube.com/watch?v=r5yxjo5V1L8) (Best Paper Award!)
