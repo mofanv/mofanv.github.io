@@ -5,7 +5,7 @@ permalink: /
 order: 1
 ---
 
-I'm Fan (Vincent) Mo, currently a Senior Research Engineer at [Trustworthy AI - Shield Lab - Huawei](https://www.huawei.com/en/technology-insights) at Shenzhen. Before this, I have worked/visited in [Nokia Bell Labs - Cambridge](http://www.bell-labs.com/about/locations/cambridge-uk/#gref) and [Arm Research - Security and Systems](https://www.arm.com/resources/research) at Cambridge, and [Telefónica Research](https://www.telefonica.com/en/sustainability-innovation/innovation/telefonica-research/) at Spain.
+I'm Fan (Vincent) Mo, currently a Principal Researcher at [Trustworthy AI - Shield Lab - Huawei](https://www.huawei.com/en/technology-insights) at Shenzhen. Before this, I have worked/visited in [Nokia Bell Labs - Cambridge](http://www.bell-labs.com/about/locations/cambridge-uk/#gref) and [Arm Research - Security and Systems](https://www.arm.com/resources/research) at Cambridge, and [Telefónica Research](https://www.telefonica.com/en/sustainability-innovation/innovation/telefonica-research/) at Spain.
 
 I finished my PhD in [Systems and Algorithms Laboratory (SysAL)](https://www.imperial.ac.uk/systems-algorithms-design-lab/) at [Imperial College London](https://en.wikipedia.org/wiki/Imperial_College_London), supervised by [Prof. Hamed Haddadi](https://haddadi.github.io/). I have a Master of Science in Management and a Bachelor of Industrial Engineering (both with rank 1 and outstanding thesis awards) in China, supervised by [Prof. Jia Zhou](http://www.msre.cqu.edu.cn/info/1193/5393.htm), working at Human-computer Interaction Lab. 
 
