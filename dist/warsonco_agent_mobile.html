@@ -608,180 +608,8 @@
       
       // Get appropriate Python code based on embedding mode
       function getPythonCode(embeddingMode) {
-        if (embeddingMode === "transformersjs") {
-          return `
-import json
-import os
-import numpy as np
-from langchain.schema import Document
-from langchain.tools import tool
-from langchain.memory import ConversationBufferMemory
-from langchain.agents import initialize_agent, AgentType
-from langchain_deepseek import ChatDeepSeek
-
-# ===================== LLM SELECTION =====================
-LLM_MODE = os.getenv("LLM_MODE", "deepseek")
-EMBEDDING_MODE = os.getenv("EMBEDDING_MODE", "transformersjs")
-
-if LLM_MODE == "deepseek":
-    llm = ChatDeepSeek(model="deepseek-chat")
-    print("Using DeepSeek as the Agent LLM...")
-else:
-    raise ValueError(f"Unsupported LLM_MODE: {LLM_MODE}")
-
-print(f"Using embedding mode: {EMBEDDING_MODE}")
-
-# ===================== KNOWLEDGE BASE =====================
-EMBEDDINGS_FILE = "/embeddings.npy"
-DOCS_FILE = "/embeddings_docs.json"
-
-# Load precomputed embeddings
-try:
-    vectors = np.load(EMBEDDINGS_FILE, allow_pickle=True)
-    vectors = np.array(vectors, dtype=np.float32)
-    # Normalize vectors
-    norms = np.linalg.norm(vectors, axis=1, keepdims=True)
-    vectors /= (norms + 1e-10)
-except:
-    vectors = np.zeros((1, 384), dtype=np.float32)  # Fallback
-
-# Load metadata/docs
-try:
-    with open(DOCS_FILE, "r", encoding="utf-8") as f:
-        docs_store = [Document(page_content=d["text"], metadata=d["metadata"]) for d in json.load(f)]
-except:
-    docs_store = [Document(page_content="No data available", metadata={})]  # Fallback
-
-def get_embedding(text: str):
-    """Get embedding from Transformers.js"""
-    updateStatus("🔍 正在生成嵌入向量...")
-    try:
-        # This will be populated by JavaScript
-        if "js_embedding" in globals():
-            import numpy as np
-            emb = np.array(js_embedding, dtype=np.float32)
-            # Normalize
-            norm = np.linalg.norm(emb)
-            if norm > 0:
-                emb /= norm
-            return emb
-        else:
-            return np.zeros(vectors.shape[1], dtype=np.float32)
-    except Exception as e:
-        print(f"[Embedding Error] {e}")
-        return np.zeros(vectors.shape[1], dtype=np.float32)
-
-def query_kb(query: str, k: int = 3):
-    """Query the knowledge base"""
-    updateStatus("📚 正在搜索知识库...")
-    q_vec = get_embedding(query)
-    
-    # Check if vectors are available
-    if vectors.size == 0 or vectors.shape[1] != q_vec.shape[0]:
-        updateStatus("⚠️ 知识库未加载，使用默认回复")
-        return [Document(page_content="知识库暂不可用，请稍后再试", metadata={"url": "N/A"})]
-    
-    sims = np.dot(q_vec, vectors.T)[0]
-    top_idx = sims.argsort()[-k:][::-1]
-    updateStatus("✅ 已找到相关文档")
-    return [docs_store[i] for i in top_idx]
-
-# ===================== TOOLS =====================
-@tool
-def search_knowledge(query: str):
-    """检索知识库相关信息"""
-    updateStatus("🔎 正在搜索知识库...")
-    docs = query_kb(query, k=3)
-    return [f"{d.page_content}\\n来源: {d.metadata.get('url','未知来源')}" for d in docs]
-
-@tool
-def get_price_info(query: str):
-    """检索价格相关信息"""
-    updateStatus("💰 正在搜索价格信息...")
-    docs = query_kb(query, k=3)
-    price_docs = [d for d in docs if "价" in d.page_content or "￥" in d.page_content]
-    return [f"{d.page_content}\\n来源: {d.metadata.get('url','未知来源')}" for d in price_docs] if price_docs else "未找到相关价格信息"
-
-# ===================== AGENT SETUP =====================
-tools = [search_knowledge, get_price_info]
-
-system_prompt = "你是一个专业助手，基于知识库回答用户问题。如果问题不清楚，请礼貌请求澄清。"
-
-memory = ConversationBufferMemory(
-    memory_key="chat_history",
-    return_messages=True,
-    system_message=system_prompt
-)
-
-updateStatus("🤖 正在初始化智能体...")
-agent = initialize_agent(
-    tools,
-    llm,
-    agent=AgentType.CHAT_CONVERSATIONAL_REACT_DESCRIPTION,
-    memory=memory,
-    verbose=False  # Reduced verbosity for mobile
-)
-
-# ===================== AGENT INTERFACE =====================
-class ProductAssistantAgent:
-    def __init__(self, agent_llm):
-        self.agent = agent_llm
-
-    def is_input_relevant(self, user_input: str, threshold=0.2):
-        updateStatus("🔍 正在检查查询相关性...")
-        q_vec = get_embedding(user_input)
-        
-        # If no vectors available, assume input is relevant
-        if vectors.size == 0:
-            return True
-            
-        vecs = vectors.astype(np.float32)  # ensure numeric
-
-        if q_vec.shape[0] != vecs.shape[1]:
-            return False
-
-        try:
-            updateStatus("📊 正在计算相似度分数...")
-            sims = np.dot(q_vec, vecs.T)
-            if sims.size == 0:
-                return False
-            max_sim = float(np.max(sims))
-            return max_sim >= float(threshold)
-        except (TypeError, ValueError):
-            return False
-
-    async def process_message(self, message: str):
-        if not self.is_input_relevant(message):
-            return "抱歉，我不太理解您的问题。可以请您描述得更清楚吗？"
-
-        # Run agent
-        updateStatus("🧠 正在思考如何回答...")
-        try:
-            ai_raw = self.agent.invoke(message)
-
-            # Only keep the AI response content
-            if hasattr(ai_raw, "content"):
-                ai_response = ai_raw.content
-            elif isinstance(ai_raw, dict) and "output" in ai_raw:
-                ai_response = ai_raw["output"]
-            else:
-                ai_response = str(ai_raw)
-
-            return ai_response
-        except Exception as e:
-            return f"处理请求时出错: {str(e)}"
-
-# ===================== GLOBAL AGENT INSTANCE =====================
-agent_instance = ProductAssistantAgent(agent_llm=agent)
-
-# ===================== MAIN FUNCTION =====================
-async def main_function(user_input: str) -> str:
-    updateStatus("🤖 正在处理您的请求...")
-    res = await agent_instance.process_message(user_input)
-    return res
-          `;
-        } else {
-          return `
+        // Mobile-optimized Python code with better error handling
+        return `
 import json
 import os
 import numpy as np
@@ -796,7 +624,7 @@ LLM_MODE = os.getenv("LLM_MODE", "deepseek")
 EMBEDDING_MODE = os.getenv("EMBEDDING_MODE", "local")
 
 if LLM_MODE == "deepseek":
-    llm = ChatDeepSeek(model="deepseek-chat")
+    llm = ChatDeepSeek(model="deepseek-chat", timeout=60)
     print("Using DeepSeek as the Agent LLM...")
 else:
     raise ValueError(f"Unsupported LLM_MODE: {LLM_MODE}")
@@ -806,8 +634,6 @@ print(f"Using embedding mode: {EMBEDDING_MODE}")
 # ===================== KNOWLEDGE BASE =====================
 EMBEDDINGS_FILE = "/embeddings.npy"
 DOCS_FILE = "/embeddings_docs.json"
-LOCAL_EMBEDDING_API = "http://localhost:8002/v1/embeddings"
-LOCAL_EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
 # Load precomputed embeddings
 try:
@@ -827,25 +653,40 @@ except:
     docs_store = [Document(page_content="No data available", metadata={})]  # Fallback
 
 def get_embedding(text: str):
-    """Get embedding from local API"""
+    """Get embedding based on mode"""
     updateStatus("🔍 正在生成嵌入向量...")
     try:
-        import requests
-        payload = {"model": LOCAL_EMBEDDING_MODEL, "input": [text]}
-        resp = requests.post(LOCAL_EMBEDDING_API, json=payload, timeout=10)
-        resp.raise_for_status()
-        data = resp.json().get("data", [])
-        if not data or "embedding" not in data[0]:
-            return np.zeros(vectors.shape[1], dtype=np.float32)
-        
-        emb = np.array(data[0]["embedding"], dtype=np.float32)
-        norm = np.linalg.norm(emb)
-        if norm > 0:
-            emb /= norm
-        return emb
+        if EMBEDDING_MODE == "transformersjs" and "js_embedding" in globals():
+            # Use Transformers.js embedding from JavaScript
+            import numpy as np
+            emb = np.array(js_embedding, dtype=np.float32)
+            # Normalize
+            norm = np.linalg.norm(emb)
+            if norm > 0:
+                emb /= norm
+            return emb
+        else:
+            # Fallback to simple embedding for mobile
+            import numpy as np
+            # Simple hash-based embedding for mobile fallback
+            words = text.lower().split()
+            emb = np.zeros(384, dtype=np.float32)
+            count = 0
+            for word in words:
+                if len(word) > 2:  # Skip very short words
+                    seed = hash(word) % 1000
+                    np.random.seed(seed)
+                    emb += np.random.rand(384).astype(np.float32) - 0.5
+                    count += 1
+            if count > 0:
+                emb /= count
+                norm = np.linalg.norm(emb)
+                if norm > 0:
+                    emb /= norm
+            return emb
     except Exception as e:
-        print(f"[Embedding API Error] {e}")
-        return np.zeros(vectors.shape[1], dtype=np.float32)
+        print(f"[Embedding Error] {e}")
+        return np.zeros(vectors.shape[1], dtype=np.float32) if vectors.size > 0 else np.zeros(384, dtype=np.float32)
 
 def query_kb(query: str, k: int = 3):
     """Query the knowledge base"""
@@ -857,10 +698,14 @@ def query_kb(query: str, k: int = 3):
         updateStatus("⚠️ 知识库未加载，使用默认回复")
         return [Document(page_content="知识库暂不可用，请稍后再试", metadata={"url": "N/A"})]
     
-    sims = np.dot(q_vec, vectors.T)[0]
-    top_idx = sims.argsort()[-k:][::-1]
-    updateStatus("✅ 已找到相关文档")
-    return [docs_store[i] for i in top_idx]
+    try:
+        sims = np.dot(q_vec, vectors.T)[0]
+        top_idx = sims.argsort()[-k:][::-1]
+        updateStatus("✅ 已找到相关文档")
+        return [docs_store[i] for i in top_idx]
+    except:
+        # Return empty results on error
+        return []
 
 # ===================== TOOLS =====================
 @tool
@@ -895,7 +740,9 @@ agent = initialize_agent(
     llm,
     agent=AgentType.CHAT_CONVERSATIONAL_REACT_DESCRIPTION,
     memory=memory,
-    verbose=False  # Reduced verbosity for mobile
+    verbose=False,  # Reduced verbosity for mobile
+    max_iterations=3,  # Limit iterations for mobile
+    early_stopping_method="generate"
 )
 
 # ===================== AGENT INTERFACE =====================
@@ -933,7 +780,7 @@ class ProductAssistantAgent:
         # Run agent
         updateStatus("🧠 正在思考如何回答...")
         try:
-            ai_raw = self.agent.invoke(message)
+            ai_raw = self.agent.invoke({"input": message})
 
             # Only keep the AI response content
             if hasattr(ai_raw, "content"):
@@ -943,9 +790,16 @@ class ProductAssistantAgent:
             else:
                 ai_response = str(ai_raw)
 
+            # Handle API errors
+            if "invalid response" in ai_response.lower() or "api" in ai_response.lower():
+                return "网络连接出现问题，请稍后重试或检查API密钥是否正确。"
+                
             return ai_response
         except Exception as e:
-            return f"处理请求时出错: {str(e)}"
+            error_msg = str(e)
+            if "invalid response" in error_msg.lower() or "api" in error_msg.lower():
+                return "DeepSeek API连接出现问题，请检查网络连接和API密钥。"
+            return f"处理请求时出错: {error_msg}"
 
 # ===================== GLOBAL AGENT INSTANCE =====================
 agent_instance = ProductAssistantAgent(agent_llm=agent)
@@ -956,7 +810,6 @@ async def main_function(user_input: str) -> str:
     res = await agent_instance.process_message(user_input)
     return res
           `;
-        }
       }
       
       // Start checking for API key when page loads
@@ -1003,29 +856,18 @@ async def main_function(user_input: str) -> str:
             
             // Pass embedding vector to Pyodide
             pyodide.globals.set("js_embedding", embeddingArray);
-            
-            // Process user input
-            const result = await pyodide.runPythonAsync(`
-                await main_function(${JSON.stringify(userInput)})
-            `);
-            
-            // Clear status
-            hideStatus();
-            
-            // Start streaming the response
-            streamOutput("🤖 助手: " + result, "assistant");
-          } else {
-            // Use default local API mode
-            const result = await pyodide.runPythonAsync(`
-                await main_function(${JSON.stringify(userInput)})
-            `);
-            
-            // Clear status
-            hideStatus();
-            
-            // Start streaming the response
-            streamOutput("🤖 助手: " + result, "assistant");
           }
+          
+          // Process user input
+          const result = await pyodide.runPythonAsync(`
+              await main_function(${JSON.stringify(userInput)})
+          `);
+          
+          // Clear status
+          hideStatus();
+          
+          // Start streaming the response
+          streamOutput("🤖 助手: " + result, "assistant");
         } catch (err) {
           // Clear status
           hideStatus();
