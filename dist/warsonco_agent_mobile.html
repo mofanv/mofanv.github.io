@@ -1,0 +1,1138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <title>产品客服机器人 - 移动优化版</title>
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.28.2/full/pyodide.js"></script>
+    <script src="config.js"></script>
+    <style>
+        /* Base styles optimized for mobile */
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            margin: 0;
+            padding: 16px;
+            background: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+            touch-action: manipulation;
+            -webkit-font-smoothing: antialiased;
+        }
+        .container {
+            max-width: 100%;
+            margin: 0 auto;
+        }
+        h2 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+        }
+        
+        /* Input and button styles optimized for touch */
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        #inputBox {
+            flex: 1;
+            padding: 14px 16px;
+            font-size: 16px;
+            border-radius: 10px;
+            border: 1px solid #ddd;
+            background: white;
+            min-height: 50px;
+            -webkit-appearance: none;
+        }
+        button {
+            padding: 14px 20px;
+            font-size: 16px;
+            border-radius: 10px;
+            border: none;
+            background: #3498db;
+            color: white;
+            cursor: pointer;
+            min-width: 80px;
+            font-weight: 600;
+            touch-action: manipulation;
+        }
+        button:active {
+            background: #2980b9;
+            transform: scale(0.98);
+        }
+        button:disabled {
+            background: #95a5a6;
+            cursor: not-allowed;
+        }
+        
+        /* Output box */
+        #outputBox {
+            width: 100%;
+            min-height: 200px;
+            padding: 16px;
+            font-size: 15px;
+            border-radius: 10px;
+            border: 1px solid #ddd;
+            background: #111;
+            color: #0f0;
+            white-space: pre-wrap;
+            overflow: auto;
+            -webkit-overflow-scrolling: touch;
+            line-height: 1.5;
+        }
+        
+        /* Status indicators */
+        .status-indicator {
+            color: #FFA500;
+            font-style: italic;
+            margin: 8px 0;
+            font-size: 14px;
+        }
+        
+        /* Loading overlay optimized for mobile */
+        #loadingOverlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            color: white;
+            font-size: 1.2rem;
+            flex-direction: column;
+            padding: 20px;
+            text-align: center;
+        }
+        #loadingMessage {
+            margin-top: 20px;
+            font-size: 1rem;
+        }
+        
+        /* API Key Form */
+        #apiKeyForm {
+            display: none;
+            margin-top: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 500px;
+        }
+        #apiKeyInput {
+            width: 100%;
+            padding: 14px;
+            margin: 12px 0;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            font-size: 16px;
+            background: white;
+            -webkit-appearance: none;
+        }
+        #submitApiKey {
+            padding: 14px 20px;
+            background: #27ae60;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+        }
+        #submitApiKey:active {
+            background: #219653;
+        }
+        .api-key-label {
+            font-size: 16px;
+            margin-bottom: 12px;
+            display: block;
+        }
+        
+        /* Performance warning */
+        .performance-warning {
+            background: #f39c12;
+            color: white;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            text-align: center;
+            font-size: 14px;
+            display: none;
+        }
+        
+        /* Transformers.js loading indicator */
+        #transformersLoading {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            z-index: 1001;
+            text-align: center;
+        }
+        #transformersProgress {
+            margin-top: 10px;
+            font-size: 14px;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: #333;
+            border-radius: 3px;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: #3498db;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 480px) {
+            body {
+                padding: 12px;
+            }
+            h2 {
+                font-size: 1.3rem;
+            }
+            #inputBox, button {
+                padding: 12px 14px;
+            }
+        }
+        
+        /* Animation optimizations */
+        .typing-cursor {
+            display: inline-block;
+            background-color: #0f0;
+            width: 6px;
+            height: 14px;
+            animation: blink 1s infinite;
+            margin-left: 2px;
+            vertical-align: middle;
+        }
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+        
+        /* Simplified dot animation for mobile */
+        .dot-flashing {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 4px;
+            background-color: #FFA500;
+            animation: dotFlashing 1s infinite linear alternate;
+            margin-left: 4px;
+        }
+        @keyframes dotFlashing {
+            0% { opacity: 1; }
+            100% { opacity: 0.3; }
+        }
+    </style>
+</head>
+<body>
+    <div class="performance-warning" id="perfWarning">
+        ⚠️ 移动设备性能有限，加载可能需要更长时间
+    </div>
+    
+    <div class="container">
+        <h2>产品客服机器人</h2>
+        
+        <div class="input-group">
+            <input id="inputBox" type="text" placeholder="输入你的问题..." disabled />
+            <button onclick="sendToPyodide()" disabled>发送</button>
+        </div>
+        
+        <div id="outputBox"></div>
+    </div>
+
+    <div id="loadingOverlay">
+        <div>正在加载AI助手...</div>
+        <div id="loadingMessage">🤖 正在初始化智能体...</div>
+        
+        <!-- API Key Input Form -->
+        <div id="apiKeyForm">
+            <span class="api-key-label">🔑 请输入您的DeepSeek API密钥:</span>
+            <input type="password" id="apiKeyInput" placeholder="sk-xxxxxxxxxxxxxxxx" />
+            <button id="submitApiKey">提交</button>
+        </div>
+    </div>
+
+    <!-- Transformers.js loading indicator -->
+    <div id="transformersLoading">
+        <div>加载Transformers.js模型...</div>
+        <div id="transformersProgress">0%</div>
+        <div class="progress-bar">
+            <div class="progress-fill" id="progressFill"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Use a lighter model for mobile devices with quantization
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        const modelName = 'Xenova/all-MiniLM-L6-v2'; // Lightweight model for mobile
+        
+        // Show loading indicator for Transformers.js
+        document.getElementById('transformersLoading').style.display = 'block';
+        
+        import { pipeline, env } from 'https://gcore.jsdelivr.net/npm/@xenova/transformers@latest';
+        
+        // Configure environment for mobile optimization
+        env.allowRemoteModels = true;
+        env.backends.onnx.wasm.numThreads = isMobile ? 1 : 2; // Reduce threads on mobile
+        env.backends.onnx.wasm.proxy = true;
+        
+        // Update progress indicator
+        let lastProgressUpdate = 0;
+        const progressCallback = (data) => {
+            if (data.status === 'progress') {
+                const now = Date.now();
+                // Throttle progress updates to avoid UI jank
+                if (now - lastProgressUpdate > 200) {
+                    const percent = Math.round(data.progress * 100);
+                    document.getElementById('transformersProgress').textContent = `${percent}%`;
+                    document.getElementById('progressFill').style.width = `${percent}%`;
+                    lastProgressUpdate = now;
+                }
+            }
+        };
+        
+        window.embeddingGenerator = null;
+        
+        async function initTransformers() {
+            try {
+                console.log('Loading Transformers.js pipeline with mobile optimization...');
+                
+                // Use a simpler configuration for mobile with quantization
+                const config = {
+                    quantized: true, // Use quantized model for mobile
+                    progress_callback: progressCallback,
+                    device: isMobile ? "wasm" : "webgpu", // Use WASM on mobile for stability
+                    dtype: {
+                        encoder_model: isMobile ? "q4" : "fp32" // Quantize more on mobile
+                    }
+                };
+                
+                window.embeddingGenerator = await pipeline('feature-extraction', modelName, config);
+                console.log("Transformers.js pipeline created successfully");
+                
+                // Hide loading indicator
+                document.getElementById('transformersLoading').style.display = 'none';
+                
+                return true;
+            } catch (error) {
+                console.error("Failed to initialize Transformers.js:", error);
+                // Hide loading indicator even on error
+                document.getElementById('transformersLoading').style.display = 'none';
+                return false;
+            }
+        }
+
+        // Initialize Transformers.js with a timeout to prevent hanging 
+        const transformersInitPromise = initTransformers();
+        
+        // Set a timeout to prevent the initialization from hanging indefinitely
+        const timeoutPromise = new Promise((resolve) => {
+            setTimeout(() => {
+                console.warn("Transformers.js initialization taking too long, continuing without it");
+                // Show error message but continue
+                document.getElementById('transformersLoading').style.display = 'none';
+                const loadingMessage = document.getElementById('loadingMessage');
+                if (loadingMessage) {
+                    loadingMessage.innerHTML = 'Transformers.js加载超时，使用备用模式 <span class="dot-flashing"></span>';
+                }
+                resolve(false);
+            }, isMobile ? 90000 : 45000); // 90 seconds timeout on mobile, 45 on desktop
+        });
+
+        // Race between initialization and timeout
+        Promise.race([transformersInitPromise, timeoutPromise]).then(success => {
+            window.transformersInitialized = success;
+            if (success) {
+                console.log("Transformers.js initialized successfully");
+            } else {
+                console.warn("Transformers.js initialization failed or timed out");
+                // If Transformers.js fails, we'll handle it in the main initialization
+            }
+        }).catch(error => {
+            console.error("Error in Transformers.js initialization:", error);
+            window.transformersInitialized = false;
+            document.getElementById('transformersLoading').style.display = 'none';
+        });
+    </script>
+
+    <script type="text/javascript">
+      // Show performance warning on mobile
+      if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+        document.getElementById('perfWarning').style.display = 'block';
+      }
+      
+      let pyodide;
+      let isStreaming = false;
+      let currentStream = null;
+      let apiKeyProvided = false;
+      let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      
+      // Function to update status from Python
+      function updateStatus(message) {
+        showStatus(message + " <span class='dot-flashing'></span>");
+        
+        // Also update the loading message if overlay is still visible
+        const loadingMessage = document.getElementById('loadingMessage');
+        if (loadingMessage) {
+          loadingMessage.textContent = message;
+        }
+      }
+
+      // Function to check if API key is provided
+      function checkApiKey() {
+        // Wait for config to load
+        if (!window.APP_CONFIG) {
+          setTimeout(checkApiKey, 100);
+          return;
+        }
+        
+        const JS_DEEPSEEK_API_KEY = window.APP_CONFIG.DEEPSEEK_API_KEY;
+        
+        // If no API key in config, show the input form
+        if (!JS_DEEPSEEK_API_KEY || JS_DEEPSEEK_API_KEY === "your_deepseek_api_key_here") {
+          document.getElementById('apiKeyForm').style.display = 'block';
+          document.getElementById('loadingMessage').textContent = '需要DeepSeek API密钥才能继续';
+        } else {
+          // API key exists in config, proceed with initialization
+          apiKeyProvided = true;
+          main();
+        }
+      }
+
+      // Handle API key submission
+      document.getElementById('submitApiKey').addEventListener('click', function() {
+        const apiKey = document.getElementById('apiKeyInput').value.trim();
+        if (apiKey) {
+          // Set the API key in the config
+          if (!window.APP_CONFIG) window.APP_CONFIG = {};
+          window.APP_CONFIG.DEEPSEEK_API_KEY = apiKey;
+          apiKeyProvided = true;
+          
+          // Hide the form and continue initialization
+          document.getElementById('apiKeyForm').style.display = 'none';
+          document.getElementById('loadingMessage').textContent = '🤖 正在初始化智能体...';
+          main();
+        } else {
+          alert('请输入有效的API密钥');
+        }
+      });
+
+      // Also allow Enter key to submit
+      document.getElementById('apiKeyInput').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+          document.getElementById('submitApiKey').click();
+        }
+      });
+
+      async function main(){
+        // Show loading overlay initially
+        document.getElementById('loadingOverlay').style.display = 'flex';
+        
+        // Wait for config and API key
+        while (!window.APP_CONFIG || !apiKeyProvided) {
+          await new Promise(r => setTimeout(r, 50));
+        }
+        
+        const JS_LLM_MODE = window.APP_CONFIG.LLM_MODE;
+        const JS_DEEPSEEK_API_KEY = window.APP_CONFIG.DEEPSEEK_API_KEY;
+        const JS_HUGGINGFACEHUB_API_TOKEN = window.APP_CONFIG.HUGGINGFACEHUB_API_TOKEN;
+        const JS_TAVILY_API_KEY = window.APP_CONFIG.TAVILY_API_KEY;
+        
+        // Default to transformersjs for mobile if not specified
+        let JS_EMBEDDING_MODE = window.APP_CONFIG.EMBEDDING_MODE || (isMobile ? "transformersjs" : "local");
+
+        // Wait for Transformers.js to initialize if we're using it
+        if (JS_EMBEDDING_MODE === "transformersjs") {
+          updateStatus("🔄 正在加载Transformers.js模型...");
+          
+          // Show Transformers.js loading indicator
+          document.getElementById('transformersLoading').style.display = 'block';
+          
+          // Wait for Transformers.js to initialize or timeout
+          let waitTime = 0;
+          while (window.transformersInitialized === undefined && waitTime < 90000) {
+            await new Promise(r => setTimeout(r, 100));
+            waitTime += 100;
+          }
+          
+          // Hide Transformers.js loading indicator
+          document.getElementById('transformersLoading').style.display = 'none';
+          
+          if (!window.transformersInitialized) {
+            console.warn("Transformers.js failed to initialize, falling back to local API mode");
+            JS_EMBEDDING_MODE = "local";
+            // Update the config to reflect the change
+            window.APP_CONFIG.EMBEDDING_MODE = "local";
+          }
+        }
+        
+        // Initialize Pyodide with a progress callback
+        updateStatus("🔄 正在加载Pyodide...");
+        pyodide = await loadPyodide({
+          // Show loading progress for better UX
+          stdout: msg => console.log(msg),
+          stderr: msg => console.error(msg)
+        });
+        
+        // Register the updateStatus function in Python's global scope
+        pyodide.globals.set("updateStatus", updateStatus);
+        // Pass embedding mode to Python
+        pyodide.globals.set("JS_EMBEDDING_MODE", JS_EMBEDDING_MODE);
+
+        // --- 1. Fetch embeddings.npy with progress tracking ---
+        updateStatus("📥 正在加载嵌入数据...");
+        try {
+          const npyResp = await fetchWithProgress("https://mofanv.github.io/dist/embeddings.npy", 
+            "embeddings.npy", "嵌入数据");
+          if (!npyResp.ok) throw new Error("加载RAG Embedding数据文件失败，请查看是否有访问权限。");
+          const npyBuffer = await npyResp.arrayBuffer();
+          pyodide.FS.writeFile("/embeddings.npy", new Uint8Array(npyBuffer));
+        } catch (error) {
+          console.error("Error loading embeddings:", error);
+          updateStatus("❌ 加载嵌入数据失败");
+          // Continue with a fallback - create empty embeddings
+          const fallbackEmbeddings = new Float32Array(384); // Default size
+          pyodide.FS.writeFile("/embeddings.npy", fallbackEmbeddings);
+        }
+
+        // --- 2. Fetch embeddings_docs.json with progress tracking ---
+        updateStatus("📥 正在加载文档数据...");
+        try {
+          const jsonResp = await fetchWithProgress("https://mofanv.github.io/dist/embeddings_docs.json", 
+            "embeddings_docs.json", "文档数据");
+          if (!jsonResp.ok) throw new Error("加载RAG Docs数据文件失败，请查看是否有访问权限。");
+          const jsonText = await jsonResp.text();
+          pyodide.FS.writeFile("/embeddings_docs.json", jsonText);
+        } catch (error) {
+          console.error("Error loading docs:", error);
+          updateStatus("❌ 加载文档数据失败");
+          // Continue with a fallback - create empty docs
+          const fallbackDocs = JSON.stringify([{text: "No data available", metadata: {url: "N/A"}}]);
+          pyodide.FS.writeFile("/embeddings_docs.json", fallbackDocs);
+        }
+
+        updateStatus("📦 正在安装Python包...");
+        await pyodide.loadPackage("micropip");
+        
+        // Install only essential packages for mobile 
+        const packagesToInstall = ["requests==2.32.5", "numpy", "langchain", "langchain_deepseek"];
+        
+        console.log(await pyodide.runPythonAsync(`
+            import sys
+            sys.version
+
+            import micropip
+
+            await micropip.install(${JSON.stringify(packagesToInstall)}, keep_going=True)
+        `));
+        
+        await pyodide.runPythonAsync(`
+            import os
+            os.environ['DEEPSEEK_API_KEY'] = "${JS_DEEPSEEK_API_KEY}"
+            os.environ['HUGGINGFACEHUB_API_TOKEN'] = "${JS_HUGGINGFACEHUB_API_TOKEN}"
+            os.environ['LLM_MODE'] = "${JS_LLM_MODE}"
+            os.environ['EMBEDDING_MODE'] = "${JS_EMBEDDING_MODE}"
+            print("API Key set:", os.environ['DEEPSEEK_API_KEY'][:6] + "...")
+            print("LLM Mode:", os.environ['LLM_MODE'])
+            print("Embedding Mode:", os.environ['EMBEDDING_MODE'])
+        `);
+        
+        // Now run the main Python code
+        updateStatus("🐍 正在执行Python代码...");
+        
+        // Use a simplified Python code for mobile to improve performance 
+        const pythonCode = getPythonCode(JS_EMBEDDING_MODE);
+        
+        await pyodide.runPythonAsync(pythonCode);
+        
+        // Hide the loading overlay and enable input
+        document.getElementById('loadingOverlay').style.display = 'none';
+        document.getElementById('inputBox').disabled = false;
+        document.querySelector('button').disabled = false;
+        document.getElementById('inputBox').focus();
+        
+        // Clear any status messages in the chat output
+        hideStatus();
+      }
+      
+      // Function to fetch with progress tracking
+      async function fetchWithProgress(url, filename, description) {
+        const response = await fetch(url);
+        const contentLength = response.headers.get('content-length');
+        const total = parseInt(contentLength, 10);
+        let loaded = 0;
+        
+        // Create a reader to track progress
+        const reader = response.body.getReader();
+        const chunks = [];
+        
+        while(true) {
+          const {done, value} = await reader.read();
+          if (done) break;
+          
+          chunks.push(value);
+          loaded += value.length;
+          
+          // Update progress every 10% or 1MB
+          if (total && (loaded / total > 0.1 || loaded % (1024 * 1024) === 0)) {
+            const percent = total ? Math.round((loaded / total) * 100) : 0;
+            updateStatus(`📥 正在加载${description}... ${percent}%`);
+          }
+        }
+        
+        // Combine chunks
+        const blob = new Blob(chunks);
+        return new Response(blob);
+      }
+      
+      // Get appropriate Python code based on embedding mode
+      function getPythonCode(embeddingMode) {
+        if (embeddingMode === "transformersjs") {
+          return `
+import json
+import os
+import numpy as np
+from langchain.schema import Document
+from langchain.tools import tool
+from langchain.memory import ConversationBufferMemory
+from langchain.agents import initialize_agent, AgentType
+from langchain_deepseek import ChatDeepSeek
+
+# ===================== LLM SELECTION =====================
+LLM_MODE = os.getenv("LLM_MODE", "deepseek")
+EMBEDDING_MODE = os.getenv("EMBEDDING_MODE", "transformersjs")
+
+if LLM_MODE == "deepseek":
+    llm = ChatDeepSeek(model="deepseek-chat")
+    print("Using DeepSeek as the Agent LLM...")
+else:
+    raise ValueError(f"Unsupported LLM_MODE: {LLM_MODE}")
+
+print(f"Using embedding mode: {EMBEDDING_MODE}")
+
+# ===================== KNOWLEDGE BASE =====================
+EMBEDDINGS_FILE = "/embeddings.npy"
+DOCS_FILE = "/embeddings_docs.json"
+
+# Load precomputed embeddings
+try:
+    vectors = np.load(EMBEDDINGS_FILE, allow_pickle=True)
+    vectors = np.array(vectors, dtype=np.float32)
+    # Normalize vectors
+    norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+    vectors /= (norms + 1e-10)
+except:
+    vectors = np.zeros((1, 384), dtype=np.float32)  # Fallback
+
+# Load metadata/docs
+try:
+    with open(DOCS_FILE, "r", encoding="utf-8") as f:
+        docs_store = [Document(page_content=d["text"], metadata=d["metadata"]) for d in json.load(f)]
+except:
+    docs_store = [Document(page_content="No data available", metadata={})]  # Fallback
+
+def get_embedding(text: str):
+    """Get embedding from Transformers.js"""
+    updateStatus("🔍 正在生成嵌入向量...")
+    try:
+        # This will be populated by JavaScript
+        if "js_embedding" in globals():
+            import numpy as np
+            emb = np.array(js_embedding, dtype=np.float32)
+            # Normalize
+            norm = np.linalg.norm(emb)
+            if norm > 0:
+                emb /= norm
+            return emb
+        else:
+            return np.zeros(vectors.shape[1], dtype=np.float32)
+    except Exception as e:
+        print(f"[Embedding Error] {e}")
+        return np.zeros(vectors.shape[1], dtype=np.float32)
+
+def query_kb(query: str, k: int = 3):
+    """Query the knowledge base"""
+    updateStatus("📚 正在搜索知识库...")
+    q_vec = get_embedding(query)
+    
+    # Check if vectors are available
+    if vectors.size == 0 or vectors.shape[1] != q_vec.shape[0]:
+        updateStatus("⚠️ 知识库未加载，使用默认回复")
+        return [Document(page_content="知识库暂不可用，请稍后再试", metadata={"url": "N/A"})]
+    
+    sims = np.dot(q_vec, vectors.T)[0]
+    top_idx = sims.argsort()[-k:][::-1]
+    updateStatus("✅ 已找到相关文档")
+    return [docs_store[i] for i in top_idx]
+
+# ===================== TOOLS =====================
+@tool
+def search_knowledge(query: str):
+    """检索知识库相关信息"""
+    updateStatus("🔎 正在搜索知识库...")
+    docs = query_kb(query, k=3)
+    return [f"{d.page_content}\\n来源: {d.metadata.get('url','未知来源')}" for d in docs]
+
+@tool
+def get_price_info(query: str):
+    """检索价格相关信息"""
+    updateStatus("💰 正在搜索价格信息...")
+    docs = query_kb(query, k=3)
+    price_docs = [d for d in docs if "价" in d.page_content or "￥" in d.page_content]
+    return [f"{d.page_content}\\n来源: {d.metadata.get('url','未知来源')}" for d in price_docs] if price_docs else "未找到相关价格信息"
+
+# ===================== AGENT SETUP =====================
+tools = [search_knowledge, get_price_info]
+
+system_prompt = "你是一个专业助手，基于知识库回答用户问题。如果问题不清楚，请礼貌请求澄清。"
+
+memory = ConversationBufferMemory(
+    memory_key="chat_history",
+    return_messages=True,
+    system_message=system_prompt
+)
+
+updateStatus("🤖 正在初始化智能体...")
+agent = initialize_agent(
+    tools,
+    llm,
+    agent=AgentType.CHAT_CONVERSATIONAL_REACT_DESCRIPTION,
+    memory=memory,
+    verbose=False  # Reduced verbosity for mobile
+)
+
+# ===================== AGENT INTERFACE =====================
+class ProductAssistantAgent:
+    def __init__(self, agent_llm):
+        self.agent = agent_llm
+
+    def is_input_relevant(self, user_input: str, threshold=0.2):
+        updateStatus("🔍 正在检查查询相关性...")
+        q_vec = get_embedding(user_input)
+        
+        # If no vectors available, assume input is relevant
+        if vectors.size == 0:
+            return True
+            
+        vecs = vectors.astype(np.float32)  # ensure numeric
+
+        if q_vec.shape[0] != vecs.shape[1]:
+            return False
+
+        try:
+            updateStatus("📊 正在计算相似度分数...")
+            sims = np.dot(q_vec, vecs.T)
+            if sims.size == 0:
+                return False
+            max_sim = float(np.max(sims))
+            return max_sim >= float(threshold)
+        except (TypeError, ValueError):
+            return False
+
+    async def process_message(self, message: str):
+        if not self.is_input_relevant(message):
+            return "抱歉，我不太理解您的问题。可以请您描述得更清楚吗？"
+
+        # Run agent
+        updateStatus("🧠 正在思考如何回答...")
+        try:
+            ai_raw = self.agent.invoke(message)
+
+            # Only keep the AI response content
+            if hasattr(ai_raw, "content"):
+                ai_response = ai_raw.content
+            elif isinstance(ai_raw, dict) and "output" in ai_raw:
+                ai_response = ai_raw["output"]
+            else:
+                ai_response = str(ai_raw)
+
+            return ai_response
+        except Exception as e:
+            return f"处理请求时出错: {str(e)}"
+
+# ===================== GLOBAL AGENT INSTANCE =====================
+agent_instance = ProductAssistantAgent(agent_llm=agent)
+
+# ===================== MAIN FUNCTION =====================
+async def main_function(user_input: str) -> str:
+    updateStatus("🤖 正在处理您的请求...")
+    res = await agent_instance.process_message(user_input)
+    return res
+          `;
+        } else {
+          return `
+import json
+import os
+import numpy as np
+from langchain.schema import Document
+from langchain.tools import tool
+from langchain.memory import ConversationBufferMemory
+from langchain.agents import initialize_agent, AgentType
+from langchain_deepseek import ChatDeepSeek
+
+# ===================== LLM SELECTION =====================
+LLM_MODE = os.getenv("LLM_MODE", "deepseek")
+EMBEDDING_MODE = os.getenv("EMBEDDING_MODE", "local")
+
+if LLM_MODE == "deepseek":
+    llm = ChatDeepSeek(model="deepseek-chat")
+    print("Using DeepSeek as the Agent LLM...")
+else:
+    raise ValueError(f"Unsupported LLM_MODE: {LLM_MODE}")
+
+print(f"Using embedding mode: {EMBEDDING_MODE}")
+
+# ===================== KNOWLEDGE BASE =====================
+EMBEDDINGS_FILE = "/embeddings.npy"
+DOCS_FILE = "/embeddings_docs.json"
+LOCAL_EMBEDDING_API = "http://localhost:8002/v1/embeddings"
+LOCAL_EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+
+# Load precomputed embeddings
+try:
+    vectors = np.load(EMBEDDINGS_FILE, allow_pickle=True)
+    vectors = np.array(vectors, dtype=np.float32)
+    # Normalize vectors
+    norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+    vectors /= (norms + 1e-10)
+except:
+    vectors = np.zeros((1, 384), dtype=np.float32)  # Fallback
+
+# Load metadata/docs
+try:
+    with open(DOCS_FILE, "r", encoding="utf-8") as f:
+        docs_store = [Document(page_content=d["text"], metadata=d["metadata"]) for d in json.load(f)]
+except:
+    docs_store = [Document(page_content="No data available", metadata={})]  # Fallback
+
+def get_embedding(text: str):
+    """Get embedding from local API"""
+    updateStatus("🔍 正在生成嵌入向量...")
+    try:
+        import requests
+        payload = {"model": LOCAL_EMBEDDING_MODEL, "input": [text]}
+        resp = requests.post(LOCAL_EMBEDDING_API, json=payload, timeout=10)
+        resp.raise_for_status()
+        data = resp.json().get("data", [])
+        if not data or "embedding" not in data[0]:
+            return np.zeros(vectors.shape[1], dtype=np.float32)
+        
+        emb = np.array(data[0]["embedding"], dtype=np.float32)
+        norm = np.linalg.norm(emb)
+        if norm > 0:
+            emb /= norm
+        return emb
+    except Exception as e:
+        print(f"[Embedding API Error] {e}")
+        return np.zeros(vectors.shape[1], dtype=np.float32)
+
+def query_kb(query: str, k: int = 3):
+    """Query the knowledge base"""
+    updateStatus("📚 正在搜索知识库...")
+    q_vec = get_embedding(query)
+    
+    # Check if vectors are available
+    if vectors.size == 0 or vectors.shape[1] != q_vec.shape[0]:
+        updateStatus("⚠️ 知识库未加载，使用默认回复")
+        return [Document(page_content="知识库暂不可用，请稍后再试", metadata={"url": "N/A"})]
+    
+    sims = np.dot(q_vec, vectors.T)[0]
+    top_idx = sims.argsort()[-k:][::-1]
+    updateStatus("✅ 已找到相关文档")
+    return [docs_store[i] for i in top_idx]
+
+# ===================== TOOLS =====================
+@tool
+def search_knowledge(query: str):
+    """检索知识库相关信息"""
+    updateStatus("🔎 正在搜索知识库...")
+    docs = query_kb(query, k=3)
+    return [f"{d.page_content}\\n来源: {d.metadata.get('url','未知来源')}" for d in docs]
+
+@tool
+def get_price_info(query: str):
+    """检索价格相关信息"""
+    updateStatus("💰 正在搜索价格信息...")
+    docs = query_kb(query, k=3)
+    price_docs = [d for d in docs if "价" in d.page_content or "￥" in d.page_content]
+    return [f"{d.page_content}\\n来源: {d.metadata.get('url','未知来源')}" for d in price_docs] if price_docs else "未找到相关价格信息"
+
+# ===================== AGENT SETUP =====================
+tools = [search_knowledge, get_price_info]
+
+system_prompt = "你是一个专业助手，基于知识库回答用户问题。如果问题不清楚，请礼貌请求澄清。"
+
+memory = ConversationBufferMemory(
+    memory_key="chat_history",
+    return_messages=True,
+    system_message=system_prompt
+)
+
+updateStatus("🤖 正在初始化智能体...")
+agent = initialize_agent(
+    tools,
+    llm,
+    agent=AgentType.CHAT_CONVERSATIONAL_REACT_DESCRIPTION,
+    memory=memory,
+    verbose=False  # Reduced verbosity for mobile
+)
+
+# ===================== AGENT INTERFACE =====================
+class ProductAssistantAgent:
+    def __init__(self, agent_llm):
+        self.agent = agent_llm
+
+    def is_input_relevant(self, user_input: str, threshold=0.2):
+        updateStatus("🔍 正在检查查询相关性...")
+        q_vec = get_embedding(user_input)
+        
+        # If no vectors available, assume input is relevant
+        if vectors.size == 0:
+            return True
+            
+        vecs = vectors.astype(np.float32)  # ensure numeric
+
+        if q_vec.shape[0] != vecs.shape[1]:
+            return False
+
+        try:
+            updateStatus("📊 正在计算相似度分数...")
+            sims = np.dot(q_vec, vecs.T)
+            if sims.size == 0:
+                return False
+            max_sim = float(np.max(sims))
+            return max_sim >= float(threshold)
+        except (TypeError, ValueError):
+            return False
+
+    async def process_message(self, message: str):
+        if not self.is_input_relevant(message):
+            return "抱歉，我不太理解您的问题。可以请您描述得更清楚吗？"
+
+        # Run agent
+        updateStatus("🧠 正在思考如何回答...")
+        try:
+            ai_raw = self.agent.invoke(message)
+
+            # Only keep the AI response content
+            if hasattr(ai_raw, "content"):
+                ai_response = ai_raw.content
+            elif isinstance(ai_raw, dict) and "output" in ai_raw:
+                ai_response = ai_raw["output"]
+            else:
+                ai_response = str(ai_raw)
+
+            return ai_response
+        except Exception as e:
+            return f"处理请求时出错: {str(e)}"
+
+# ===================== GLOBAL AGENT INSTANCE =====================
+agent_instance = ProductAssistantAgent(agent_llm=agent)
+
+# ===================== MAIN FUNCTION =====================
+async def main_function(user_input: str) -> str:
+    updateStatus("🤖 正在处理您的请求...")
+    res = await agent_instance.process_message(user_input)
+    return res
+          `;
+        }
+      }
+      
+      // Start checking for API key when page loads
+      checkApiKey();
+
+      // === Chat UI functions ===
+      async function sendToPyodide() {
+        if (isStreaming) {
+          // If already streaming, cancel the current stream
+          if (currentStream) {
+            clearInterval(currentStream);
+            currentStream = null;
+          }
+          // Remove the cursor
+          const cursor = document.querySelector('.typing-cursor');
+          if (cursor) cursor.remove();
+          isStreaming = false;
+        }
+        
+        const userInput = document.getElementById("inputBox").value;
+        if (!userInput.trim()) return;
+        
+        logOutput("👤 用户: " + userInput, "user");
+
+        // Disable input during processing
+        document.getElementById("inputBox").value = "";
+        document.getElementById("inputBox").disabled = true;
+        document.querySelector('button').disabled = true;
+
+        // Show initial status
+        showStatus("🤖 正在处理您的请求 <span class='dot-flashing'></span>");
+
+        try {
+          // Check which embedding mode to use
+          const embeddingMode = window.APP_CONFIG.EMBEDDING_MODE || "local";
+          
+          if (embeddingMode === "transformersjs" && window.embeddingGenerator) {
+            // Use Transformers.js to generate embeddings
+            showStatus("🧠 正在使用 Transformers.js 生成嵌入 <span class='dot-flashing'></span>");
+            
+            // Generate embedding vector
+            const output = await window.embeddingGenerator(userInput, { pooling: 'mean', normalize: true });
+            const embeddingArray = Array.from(output.data);
+            
+            // Pass embedding vector to Pyodide
+            pyodide.globals.set("js_embedding", embeddingArray);
+            
+            // Process user input
+            const result = await pyodide.runPythonAsync(`
+                await main_function(${JSON.stringify(userInput)})
+            `);
+            
+            // Clear status
+            hideStatus();
+            
+            // Start streaming the response
+            streamOutput("🤖 助手: " + result, "assistant");
+          } else {
+            // Use default local API mode
+            const result = await pyodide.runPythonAsync(`
+                await main_function(${JSON.stringify(userInput)})
+            `);
+            
+            // Clear status
+            hideStatus();
+            
+            // Start streaming the response
+            streamOutput("🤖 助手: " + result, "assistant");
+          }
+        } catch (err) {
+          // Clear status
+          hideStatus();
+          
+          logOutput("⚠️ 错误: " + err, "error");
+          // Re-enable input on error
+          document.getElementById("inputBox").disabled = false;
+          document.querySelector('button').disabled = false;
+        }
+      }
+
+      document.getElementById("inputBox").addEventListener("keydown", function(event) {
+          if (event.key === 'Enter') {
+              event.preventDefault(); // prevent newline in input
+              sendToPyodide();
+          }
+      });
+
+      function logOutput(message, type="assistant") {
+          const out = document.getElementById("outputBox");
+
+          // Create a span element for message
+          const span = document.createElement("span");
+          span.textContent = message;
+
+          if (type === "user") {
+              span.style.color = "#1E90FF"; // blue for 用户
+              span.style.fontWeight = "bold";
+          } else if (type === "assistant") {
+              span.style.color = "#32CD32"; // green for 助手
+          } else if (type === "error") {
+              span.style.color = "#FF4500"; // red for errors
+              span.style.fontWeight = "bold";
+          }
+
+          out.appendChild(span);
+          out.appendChild(document.createElement("br")); // line break
+          out.appendChild(document.createElement("br")); // extra spacing
+
+          out.scrollTop = out.scrollHeight; // auto-scroll
+      }
+      
+      function streamOutput(message, type) {
+          isStreaming = true;
+          const out = document.getElementById("outputBox");
+          
+          // Create a span for the message
+          const span = document.createElement("span");
+          if (type === "assistant") {
+              span.style.color = "#32CD32"; // green for 助手
+          }
+          
+          out.appendChild(span);
+          
+          // Create a blinking cursor
+          const cursor = document.createElement("span");
+          cursor.className = "typing-cursor";
+          out.appendChild(cursor);
+          
+          let i = 0;
+          currentStream = setInterval(() => {
+              if (i < message.length) {
+                  span.textContent += message[i];
+                  i++;
+                  out.scrollTop = out.scrollHeight; // auto-scroll
+              } else {
+                  // Finished streaming
+                  clearInterval(currentStream);
+                  currentStream = null;
+                  isStreaming = false;
+                  
+                  // Remove the cursor
+                  cursor.remove();
+                  
+                  // Add line breaks
+                  out.appendChild(document.createElement("br"));
+                  out.appendChild(document.createElement("br"));
+                  
+                  // Re-enable input
+                  document.getElementById("inputBox").disabled = false;
+                  document.querySelector('button').disabled = false;
+                  document.getElementById("inputBox").focus();
+              }
+          }, 30); // Adjust speed as needed (milliseconds per character)
+      }
+      
+      function showStatus(message) {
+          // Remove any existing status
+          hideStatus();
+          
+          const out = document.getElementById("outputBox");
+          const statusElement = document.createElement("div");
+          statusElement.id = "status-indicator";
+          statusElement.className = "status-indicator";
+          statusElement.innerHTML = message;
+          
+          out.appendChild(statusElement);
+          out.scrollTop = out.scrollHeight;
+      }
+      
+      function hideStatus() {
+          const statusElement = document.getElementById("status-indicator");
+          if (statusElement) {
+              statusElement.remove();
+          }
+      }
+
+    </script>
+</body>
+</html>
