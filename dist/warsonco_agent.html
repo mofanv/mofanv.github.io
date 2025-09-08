@@ -1,128 +1,172 @@
 <!doctype html>
 <html>
-  <head>
-      <script src="https://cdn.jsdelivr.net/pyodide/v0.28.2/full/pyodide.js"></script>
-      <script src="config.js"></script>
+<head>
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.28.2/full/pyodide.js"></script>
+    <script src="config.js"></script>
     <meta charset="UTF-8">
-  <title>Pyodide Chat</title>
-  <style>
-    /* 保持原有的样式不变 */
-    body {
-      font-family: Arial, sans-serif;
-      margin: 30px;
-      background: #f5f5f5;
-    }
-    #inputBox, #outputBox {
-      width: 100%;
-      padding: 10px;
-      font-size: 16px;
-      border-radius: 8px;
-      border: 1px solid #ccc;
-      margin-bottom: 15px;
-      box-sizing: border-box;
-    }
-    #outputBox {
-      background: #111;
-      color: #0f0;
-      min-height: 150px;
-      white-space: pre-wrap;
-    }
-    button {
-      padding: 10px 20px;
-      font-size: 16px;
-      border-radius: 8px;
-      border: none;
-      background: #007bff;
-      color: #fff;
-      cursor: pointer;
-    }
-    button:hover {
-      background: #0056b3;
-    }
-    .typing-cursor {
-      display: inline-block;
-      background-color: #0f0;
-      width: 8px;
-      height: 16px;
-      animation: blink 1s infinite;
-      margin-left: 2px;
-      vertical-align: middle;
-    }
-    @keyframes blink {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0; }
-    }
-    .status-indicator {
-      color: #FFA500; /* Orange color for status messages */
-      font-style: italic;
-      margin: 5px 0;
-    }
-    .dot-flashing {
-      position: relative;
-      display: inline-block;
-      width: 10px;
-      height: 10px;
-      border-radius: 5px;
-      background-color: #FFA500;
-      color: #FFA500;
-      animation: dotFlashing 1s infinite linear alternate;
-      animation-delay: 0.5s;
-      margin-left: 5px;
-    }
-    .dot-flashing::before, .dot-flashing::after {
-      content: '';
-      display: inline-block;
-      position: absolute;
-      top: 0;
-      width: 10px;
-      height: 10px;
-      border-radius: 5px;
-      background-color: #FFA500;
-      color: #FFA500;
-    }
-    .dot-flashing::before {
-      left: -15px;
-      animation: dotFlashing 1s infinite alternate;
-      animation-delay: 0s;
-    }
-    .dot-flashing::after {
-      left: 15px;
-      animation: dotFlashing 1s infinite alternate;
-      animation-delay: 1s;
-    }
-    @keyframes dotFlashing {
-      0% {
-        background-color: #FFA500;
-      }
-      50%,
-      100% {
-        background-color: #ebe6ff;
-      }
-    }
-    #loadingOverlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.7);
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      z-index: 1000;
-      color: white;
-      font-size: 24px;
-      flex-direction: column;
-    }
-    #loadingMessage {
-      margin-top: 20px;
-    }
-  </style>
-  </head>
-  <body>
+    <title>Pyodide Chat</title>
+    <style>
+        /* Existing styles remain unchanged */
+        body {
+            font-family: Arial, sans-serif;
+            margin: 30px;
+            background: #f5f5f5;
+        }
+        #inputBox, #outputBox {
+            width: 100%;
+            padding: 10px;
+            font-size: 16px;
+            border-radius: 8px;
+            border: 1px solid #ccc;
+            margin-bottom: 15px;
+            box-sizing: border-box;
+        }
+        #outputBox {
+            background: #111;
+            color: #0f0;
+            min-height: 150px;
+            white-space: pre-wrap;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            border-radius: 8px;
+            border: none;
+            background: #007bff;
+            color: #fff;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .typing-cursor {
+            display: inline-block;
+            background-color: #0f0;
+            width: 8px;
+            height: 16px;
+            animation: blink 1s infinite;
+            margin-left: 2px;
+            vertical-align: middle;
+        }
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+        .status-indicator {
+            color: #FFA500;
+            font-style: italic;
+            margin: 5px 0;
+        }
+        .dot-flashing {
+            position: relative;
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 5px;
+            background-color: #FFA500;
+            color: #FFA500;
+            animation: dotFlashing 1s infinite linear alternate;
+            animation-delay: 0.5s;
+            margin-left: 5px;
+        }
+        .dot-flashing::before, .dot-flashing::after {
+            content: '';
+            display: inline-block;
+            position: absolute;
+            top: 0;
+            width: 10px;
+            height: 10px;
+            border-radius: 5px;
+            background-color: #FFA500;
+            color: #FFA500;
+        }
+        .dot-flashing::before {
+            left: -15px;
+            animation: dotFlashing 1s infinite alternate;
+            animation-delay: 0s;
+        }
+        .dot-flashing::after {
+            left: 15px;
+            animation: dotFlashing 1s infinite alternate;
+            animation-delay: 1s;
+        }
+        @keyframes dotFlashing {
+            0% {
+                background-color: #FFA500;
+            }
+            50%,
+            100% {
+                background-color: #ebe6ff;
+            }
+        }
+        #loadingOverlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            color: white;
+            font-size: 24px;
+            flex-direction: column;
+        }
+        #loadingMessage {
+            margin-top: 20px;
+        }
+        
+        /* New styles for API key input */
+        #apiKeyForm {
+            display: none;
+            margin-top: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+            width: 80%;
+            max-width: 500px;
+        }
+        #apiKeyInput {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        #submitApiKey {
+            padding: 10px 20px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        #submitApiKey:hover {
+            background: #218838;
+        }
+        .api-key-label {
+            font-size: 18px;
+            margin-bottom: 10px;
+            display: block;
+        }
+    </style>
+</head>
+<body>
     <div id="loadingOverlay">
-      <div>正在加载AI助手...</div>
-      <div id="loadingMessage">🤖 正在初始化智能体...</div>
+        <div>正在加载AI助手...</div>
+        <div id="loadingMessage">🤖 正在初始化智能体...</div>
+        
+        <!-- API Key Input Form -->
+        <div id="apiKeyForm">
+            <span class="api-key-label">🔑 请输入您的DeepSeek API密钥:</span>
+            <input type="password" id="apiKeyInput" placeholder="sk-xxxxxxxxxxxxxxxx" />
+            <button id="submitApiKey">提交</button>
+        </div>
     </div>
     
     <h2>产品客服机器人</h2>
@@ -168,6 +212,7 @@
       let pyodide;
       let isStreaming = false;
       let currentStream = null;
+      let apiKeyProvided = false;
 
       // Function to update status from Python
       function updateStatus(message) {
@@ -180,11 +225,58 @@
         }
       }
 
+      // Function to check if API key is provided
+      function checkApiKey() {
+        // Wait for config to load
+        if (!window.APP_CONFIG) {
+          setTimeout(checkApiKey, 100);
+          return;
+        }
+        
+        const JS_DEEPSEEK_API_KEY = window.APP_CONFIG.DEEPSEEK_API_KEY;
+        
+        // If no API key in config, show the input form
+        if (!JS_DEEPSEEK_API_KEY || JS_DEEPSEEK_API_KEY === "your_deepseek_api_key_here") {
+          document.getElementById('apiKeyForm').style.display = 'block';
+          document.getElementById('loadingMessage').textContent = '需要DeepSeek API密钥才能继续';
+        } else {
+          // API key exists in config, proceed with initialization
+          apiKeyProvided = true;
+          main();
+        }
+      }
+
+      // Handle API key submission
+      document.getElementById('submitApiKey').addEventListener('click', function() {
+        const apiKey = document.getElementById('apiKeyInput').value.trim();
+        if (apiKey) {
+          // Set the API key in the config
+          if (!window.APP_CONFIG) window.APP_CONFIG = {};
+          window.APP_CONFIG.DEEPSEEK_API_KEY = apiKey;
+          apiKeyProvided = true;
+          
+          // Hide the form and continue initialization
+          document.getElementById('apiKeyForm').style.display = 'none';
+          document.getElementById('loadingMessage').textContent = '🤖 正在初始化智能体...';
+          main();
+        } else {
+          alert('请输入有效的API密钥');
+        }
+      });
+
+      // Also allow Enter key to submit
+      document.getElementById('apiKeyInput').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+          document.getElementById('submitApiKey').click();
+        }
+      });
+
       async function main(){
         // Show loading overlay initially
         document.getElementById('loadingOverlay').style.display = 'flex';
         
-        while (!window.APP_CONFIG) {
+        // Wait for config and API key
+        while (!window.APP_CONFIG || !apiKeyProvided) {
           await new Promise(r => setTimeout(r, 50));
         }
         
@@ -518,11 +610,8 @@ async def main_function(user_input: str) -> str:
         hideStatus();
       }
       
-      // Start initialization when page loads
-      main().catch(error => {
-        console.error("Initialization error:", error);
-        document.getElementById('loadingMessage').textContent = "❌ 初始化失败: " + error.message;
-      });
+      // Start checking for API key when page loads
+      checkApiKey();
 
       // === Chat UI functions ===
       async function sendToPyodide() {
@@ -716,5 +805,5 @@ async def main_function(user_input: str) -> str:
       }
 
     </script>
-  </body>
+</body>
 </html>
