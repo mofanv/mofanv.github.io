@@ -1,0 +1,720 @@
+<!doctype html>
+<html>
+  <head>
+      <script src="https://cdn.jsdelivr.net/pyodide/v0.28.2/full/pyodide.js"></script>
+      <script src="config.js"></script>
+    <meta charset="UTF-8">
+  <title>Pyodide Chat</title>
+  <style>
+    /* 保持原有的样式不变 */
+    body {
+      font-family: Arial, sans-serif;
+      margin: 30px;
+      background: #f5f5f5;
+    }
+    #inputBox, #outputBox {
+      width: 100%;
+      padding: 10px;
+      font-size: 16px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      margin-bottom: 15px;
+      box-sizing: border-box;
+    }
+    #outputBox {
+      background: #111;
+      color: #0f0;
+      min-height: 150px;
+      white-space: pre-wrap;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      border-radius: 8px;
+      border: none;
+      background: #007bff;
+      color: #fff;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #0056b3;
+    }
+    .typing-cursor {
+      display: inline-block;
+      background-color: #0f0;
+      width: 8px;
+      height: 16px;
+      animation: blink 1s infinite;
+      margin-left: 2px;
+      vertical-align: middle;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+    .status-indicator {
+      color: #FFA500; /* Orange color for status messages */
+      font-style: italic;
+      margin: 5px 0;
+    }
+    .dot-flashing {
+      position: relative;
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 5px;
+      background-color: #FFA500;
+      color: #FFA500;
+      animation: dotFlashing 1s infinite linear alternate;
+      animation-delay: 0.5s;
+      margin-left: 5px;
+    }
+    .dot-flashing::before, .dot-flashing::after {
+      content: '';
+      display: inline-block;
+      position: absolute;
+      top: 0;
+      width: 10px;
+      height: 10px;
+      border-radius: 5px;
+      background-color: #FFA500;
+      color: #FFA500;
+    }
+    .dot-flashing::before {
+      left: -15px;
+      animation: dotFlashing 1s infinite alternate;
+      animation-delay: 0s;
+    }
+    .dot-flashing::after {
+      left: 15px;
+      animation: dotFlashing 1s infinite alternate;
+      animation-delay: 1s;
+    }
+    @keyframes dotFlashing {
+      0% {
+        background-color: #FFA500;
+      }
+      50%,
+      100% {
+        background-color: #ebe6ff;
+      }
+    }
+    #loadingOverlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.7);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+      color: white;
+      font-size: 24px;
+      flex-direction: column;
+    }
+    #loadingMessage {
+      margin-top: 20px;
+    }
+  </style>
+  </head>
+  <body>
+    <div id="loadingOverlay">
+      <div>正在加载AI助手...</div>
+      <div id="loadingMessage">🤖 正在初始化智能体...</div>
+    </div>
+    
+    <h2>产品客服机器人</h2>
+    <!-- Input section -->
+    <input id="inputBox" type="text" placeholder="输入你的问题..." disabled />
+    <button onclick="sendToPyodide()" disabled>发送</button>
+    
+    <!-- Output section -->
+    <div id="outputBox"></div>
+
+    <script type="module">
+        // 使用 import 语句直接从 gcore 导入 transformers 库
+        import { pipeline } from 'https://gcore.jsdelivr.net/npm/@xenova/transformers@latest';
+
+        // 全局变量，用于存储嵌入生成器
+        window.embeddingGenerator = null;
+
+        async function initTransformers() {
+            try {
+                console.log('Loading Transformers.js pipeline...');
+                // 创建嵌入 pipeline
+                window.embeddingGenerator = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+                console.log("Transformers.js pipeline created");
+                return true;
+            } catch (error) {
+                console.error("Failed to initialize Transformers.js:", error);
+                return false;
+            }
+        }
+
+        // 初始化 Transformers.js
+        initTransformers().then(success => {
+            window.transformersInitialized = success;
+            if (success) {
+                console.log("Transformers.js initialized successfully");
+            } else {
+                console.warn("Transformers.js initialization failed, will fall back to local API");
+            }
+        });
+    </script>
+
+    <script type="text/javascript">
+      let pyodide;
+      let isStreaming = false;
+      let currentStream = null;
+
+      // Function to update status from Python
+      function updateStatus(message) {
+        showStatus(message + " <span class='dot-flashing'></span>");
+        
+        // Also update the loading message if overlay is still visible
+        const loadingMessage = document.getElementById('loadingMessage');
+        if (loadingMessage) {
+          loadingMessage.textContent = message;
+        }
+      }
+
+      async function main(){
+        // Show loading overlay initially
+        document.getElementById('loadingOverlay').style.display = 'flex';
+        
+        while (!window.APP_CONFIG) {
+          await new Promise(r => setTimeout(r, 50));
+        }
+        
+        const JS_LLM_MODE = window.APP_CONFIG.LLM_MODE;
+        const JS_DEEPSEEK_API_KEY = window.APP_CONFIG.DEEPSEEK_API_KEY;
+        const JS_HUGGINGFACEHUB_API_TOKEN = window.APP_CONFIG.HUGGINGFACEHUB_API_TOKEN;
+        const JS_TAVILY_API_KEY = window.APP_CONFIG.TAVILY_API_KEY;
+        // 从配置中获取嵌入模式，默认为 "local" (使用本地API)
+        const JS_EMBEDDING_MODE = window.APP_CONFIG.EMBEDDING_MODE || "local";
+
+        pyodide = await loadPyodide();
+        
+        // Register the updateStatus function in Python's global scope
+        pyodide.globals.set("updateStatus", updateStatus);
+        // 将嵌入模式传递给 Python
+        pyodide.globals.set("JS_EMBEDDING_MODE", JS_EMBEDDING_MODE);
+
+        // --- 1. Fetch embeddings.npy ---
+        updateStatus("📥 正在加载嵌入数据...");
+        const npyResp = await fetch("https://mofanv.github.io/dist/embeddings.npy"); // http://localhost:8001/embeddings.npy
+        if (!npyResp.ok) throw new Error("加载RAG Embedding数据文件失败，请查看是否有访问权限。");
+        const npyBuffer = await npyResp.arrayBuffer();
+        pyodide.FS.writeFile("/embeddings.npy", new Uint8Array(npyBuffer));
+
+        // --- 2. Fetch embeddings_docs.json ---
+        updateStatus("📥 正在加载文档数据...");
+        const jsonResp = await fetch("https://mofanv.github.io/dist/embeddings_docs.json"); //http://localhost:8001/embeddings_docs.json
+        if (!jsonResp.ok) throw new Error("加载RAG Docs数据文件失败，请查看是否有访问权限。");
+        const jsonText = await jsonResp.text();
+        pyodide.FS.writeFile("/embeddings_docs.json", jsonText);
+
+        updateStatus("📦 正在安装Python包...");
+        await pyodide.loadPackage("micropip");
+        console.log(await pyodide.runPythonAsync(`
+            import sys
+            sys.version
+
+            import micropip
+
+            await micropip.install("requests==2.32.5", reinstall=True)
+            await micropip.install([
+                "numpy",
+                "langchain",
+                "langchain_deepseek",
+                "langchain_openai",
+            ], keep_going=True)
+
+        `));
+        await pyodide.runPythonAsync("print(1 + 2)");
+        await pyodide.runPythonAsync(`
+            import os
+            os.environ['DEEPSEEK_API_KEY'] = "${JS_DEEPSEEK_API_KEY}"
+            os.environ['HUGGINGFACEHUB_API_TOKEN'] = "${JS_HUGGINGFACEHUB_API_TOKEN}"
+            os.environ['LLM_MODE'] = "${JS_LLM_MODE}"
+            os.environ['EMBEDDING_MODE'] = "${JS_EMBEDDING_MODE}"
+            print(os.environ['DEEPSEEK_API_KEY'])
+            print(os.environ['HUGGINGFACEHUB_API_TOKEN'])
+            print(os.environ['LLM_MODE'])
+            print(os.environ['EMBEDDING_MODE'])
+        `);
+        
+        // Now run the main Python code
+        updateStatus("🐍 正在执行Python代码...");
+        await pyodide.runPythonAsync(String.raw`
+# ===================== IMPORTS =====================
+import json
+import os
+import io
+import requests
+import asyncio
+import time
+from typing import List
+import numpy as np
+from langchain.schema import Document
+from langchain.tools import tool
+from langchain.memory import ConversationBufferMemory
+from langchain.agents import initialize_agent, AgentType
+from langchain_deepseek import ChatDeepSeek
+from langchain_openai import ChatOpenAI
+
+# ===================== LLM SELECTION =====================
+LLM_MODE = os.getenv("LLM_MODE", "deepseek")
+EMBEDDING_MODE = os.getenv("EMBEDDING_MODE", "local")
+LOCAL_MODEL_NAME = os.getenv("LOCAL_MODEL_NAME", "gguf_models/Qwen3-8B-Q4_K_M.gguf")
+LOCAL_API_BASE = os.getenv("LOCAL_API_BASE", "http://localhost:8000/v1")
+LOCAL_API_KEY = os.getenv("LOCAL_API_KEY", "sk-no-key-required")
+
+if LLM_MODE == "deepseek":
+    llm = ChatDeepSeek(model="deepseek-chat")
+    print("Calling DeepSeek as the Agent LLM...")
+elif LLM_MODE == "local":
+    llm = ChatOpenAI(
+        model=LOCAL_MODEL_NAME,
+        openai_api_base=LOCAL_API_BASE,
+        openai_api_key=LOCAL_API_KEY
+    )
+    print("Calling Local Model as the Agent LLM...")
+else:
+    raise ValueError(f"Unsupported LLM_MODE: {LLM_MODE}")
+
+print(f"Using embedding mode: {EMBEDDING_MODE}")
+
+# ===================== KNOWLEDGE BASE (LOCAL EMBEDDINGS) =====================
+EMBEDDINGS_FILE = "/embeddings.npy"
+DOCS_FILE = "/embeddings_docs.json"
+LOCAL_EMBEDDING_API = os.getenv("LOCAL_EMBEDDING_API", "http://localhost:8002/v1/embeddings")
+LOCAL_EMBEDDING_MODEL = os.getenv("LOCAL_EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
+
+# Load precomputed embeddings
+vectors = np.load(EMBEDDINGS_FILE, allow_pickle=True)
+vectors = np.array(vectors, dtype=np.float32)  # force numeric
+# Load metadata/docs corresponding to embeddings
+with open(DOCS_FILE, "r", encoding="utf-8") as f:
+    docs_store = [Document(page_content=d["text"], metadata=d["metadata"]) for d in json.load(f)]
+
+# Normalize vectors safely
+norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+vectors /= (norms + 1e-10)
+
+def get_embedding(text: str):
+    """
+    Get embedding either from local API or Transformers.js based on configuration
+    """
+    updateStatus("🔍 正在生成嵌入向量...")
+    
+def get_embedding(text: str):
+    if EMBEDDING_MODE == "transformersjs":
+        import numpy as np
+        if "js_embedding" in globals():
+            emb = np.array(js_embedding, dtype=np.float32)
+            norm = np.linalg.norm(emb)
+            if norm > 0:
+                emb /= norm
+            return emb
+        else:
+            return np.zeros(vectors.shape[1], dtype=np.float32)
+    else:
+        # Use local API for embedding generation (original implementation)
+        try:
+            payload = {"model": LOCAL_EMBEDDING_MODEL, "input": [text]}
+            resp = requests.post(LOCAL_EMBEDDING_API, json=payload, timeout=5)
+            resp.raise_for_status()
+
+            data = resp.json().get("data", [])
+            if not data or "embedding" not in data[0]:
+                # fallback to zeros
+                return np.zeros(vectors.shape[1], dtype=np.float32)
+
+            emb_list = data[0]["embedding"]
+            # force all elements to float
+            emb_numeric = []
+            for x in emb_list:
+                try:
+                    emb_numeric.append(float(x))
+                except Exception:
+                    emb_numeric.append(0.0)
+
+            emb = np.array(emb_numeric, dtype=np.float32)
+
+            # normalize
+            norm = np.linalg.norm(emb)
+            if norm > 0:
+                emb /= norm
+
+            return emb
+
+        except Exception as e:
+            print(f"[Embedding API Error] {e}")
+            return np.zeros(vectors.shape[1], dtype=np.float32)
+
+def query_kb(query: str, k: int = 3):
+    """Query the knowledge base using local embeddings"""
+    updateStatus("📚 正在搜索知识库...")
+    q_vec = get_embedding(query)
+    
+    updateStatus("📊 正在计算相似度...")
+    sims = np.dot(q_vec, vectors.T)[0]
+    top_idx = sims.argsort()[-k:][::-1]
+    
+    updateStatus("✅ 已找到相关文档")
+    return [docs_store[i] for i in top_idx]
+
+def format_with_citation(docs: List[Document]):
+    return [f"{d.page_content}\n来源: {d.metadata.get('url','未知来源')}" for d in docs]
+
+# ===================== TOOLS =====================
+@tool
+def search_knowledge(query: str):
+    """检索知识库相关信息，并返回内容与来源"""
+    updateStatus("🔎 正在搜索知识库...")
+    docs = query_kb(query, k=3)
+    return format_with_citation(docs)
+
+@tool
+def get_price_info(query: str):
+    """检索价格相关信息"""
+    updateStatus("💰 正在搜索价格信息...")
+    docs = query_kb(query, k=3)
+    price_docs = [d for d in docs if "价" in d.page_content or "￥" in d.page_content]
+    return format_with_citation(price_docs) if price_docs else "未找到相关价格信息"
+
+@tool
+def get_spec_info(query: str):
+    """检索规格/尺寸相关信息"""
+    updateStatus("📏 正在搜索规格信息...")
+    docs = query_kb(query, k=3)
+    spec_docs = [d for d in docs if "规" in d.page_content or "尺寸" in d.page_content]
+    return format_with_citation(spec_docs) if spec_docs else "未找到相关规格信息"
+
+@tool
+def get_comparison_info(query: str):
+    """对比两个产品或条目"""
+    updateStatus("⚖️ 正在比较项目...")
+    parts = query.split("vs")
+    if len(parts) != 2:
+        return "请使用「产品A vs 产品B」格式进行比较"
+    docs1 = query_kb(parts[0].strip(), k=2)
+    docs2 = query_kb(parts[1].strip(), k=2)
+    return {
+        "第一条目": format_with_citation(docs1),
+        "第二条目": format_with_citation(docs2)
+    }
+
+@tool
+def get_summary(query: str):
+    """对检索到的文档进行摘要"""
+    updateStatus("📝 正在生成文档摘要...")
+    docs = query_kb(query, k=5)
+    contents = "\n".join([d.page_content for d in docs])
+    return f"文档摘要:\n{contents}\n来源: {[d.metadata.get('url','未知来源') for d in docs]}"
+
+@tool
+def get_keywords(query: str):
+    """提取检索文档中的关键词"""
+    updateStatus("🔑 正在提取关键词...")
+    docs = query_kb(query, k=5)
+    all_text = " ".join([d.page_content for d in docs])
+    words = list(set(all_text.replace("\n"," ").split()))
+    top_words = sorted(words, key=lambda w: -all_text.count(w))[:20]
+    return {"keywords": top_words, "sources": [d.metadata.get('url','未知来源') for d in docs]}
+
+@tool
+def get_all_sources(query: str):
+    """返回检索结果的所有来源 URL"""
+    updateStatus("🌐 正在收集来源信息...")
+    docs = query_kb(query, k=5)
+    return [d.metadata.get("url","未知来源") for d in docs]
+
+# ===================== AGENT SETUP =====================
+tools = [
+    search_knowledge, get_price_info, get_spec_info,
+    get_comparison_info, get_summary, get_keywords, get_all_sources
+]
+
+system_prompt = "你是一个专业助手，基于知识库回答用户问题。如果问题不清楚，请礼貌请求澄清。"
+
+memory = ConversationBufferMemory(
+    memory_key="chat_history",
+    return_messages=True,
+    system_message=system_prompt
+)
+
+updateStatus("🤖 正在初始化智能体...")
+agent = initialize_agent(
+    tools,
+    llm,
+    agent=AgentType.CHAT_CONVERSATIONAL_REACT_DESCRIPTION,
+    memory=memory,
+    verbose=True
+)
+
+# ===================== AGENT INTERFACE =====================
+class ProductAssistantAgent:
+    def __init__(self, agent_llm):
+        self.agent = agent_llm
+
+    def is_input_relevant(self, user_input: str, threshold=0.2):
+        updateStatus("🔍 正在检查查询相关性...")
+        q_vec = get_embedding(user_input)
+        vecs = vectors.astype(np.float32)  # ensure numeric
+
+        if q_vec.shape[0] != vecs.shape[1]:
+            return False
+
+        try:
+            updateStatus("📊 正在计算相似度分数...")
+            sims = np.dot(q_vec, vecs.T)
+            if sims.size == 0:
+                return False
+            max_sim = float(np.max(sims))
+            return max_sim >= float(threshold)
+        except (TypeError, ValueError):
+            return False
+
+    async def process_message(self, message: str):
+        if not self.is_input_relevant(message):
+            return "抱歉，我不太理解您的问题。可以请您描述得更清楚吗？"
+
+        # Run agent
+        updateStatus("🧠 正在思考如何回答...")
+        ai_raw = self.agent.invoke(message)
+
+        # Only keep the AI response content
+        if hasattr(ai_raw, "content"):
+            ai_response = ai_raw.content
+        elif isinstance(ai_raw, dict) and "output" in ai_raw:
+            ai_response = ai_raw["output"]
+        else:
+            ai_response = str(ai_raw)
+
+        return ai_response
+
+# ===================== GLOBAL AGENT INSTANCE =====================
+agent_instance = ProductAssistantAgent(agent_llm=agent)
+
+# ===================== MAIN FUNCTION =====================
+async def main_function(user_input: str) -> str:
+    updateStatus("🤖 正在处理您的请求...")
+    res = await agent_instance.process_message(user_input)
+    return res
+
+        `);
+        
+        // Hide the loading overlay and enable input
+        document.getElementById('loadingOverlay').style.display = 'none';
+        document.getElementById('inputBox').disabled = false;
+        document.querySelector('button').disabled = false;
+        document.getElementById('inputBox').focus();
+        
+        // Clear any status messages in the chat output
+        hideStatus();
+      }
+      
+      // Start initialization when page loads
+      main().catch(error => {
+        console.error("Initialization error:", error);
+        document.getElementById('loadingMessage').textContent = "❌ 初始化失败: " + error.message;
+      });
+
+      // === Chat UI functions ===
+      async function sendToPyodide() {
+        if (isStreaming) {
+          // If already streaming, cancel the current stream
+          if (currentStream) {
+            clearInterval(currentStream);
+            currentStream = null;
+          }
+          // Remove the cursor
+          const cursor = document.querySelector('.typing-cursor');
+          if (cursor) cursor.remove();
+          isStreaming = false;
+        }
+        
+        const userInput = document.getElementById("inputBox").value;
+        if (!userInput.trim()) return;
+        
+        logOutput("👤 用户: " + userInput, "user");
+
+        // Disable input during processing
+        document.getElementById("inputBox").value = "";
+        document.getElementById("inputBox").disabled = true;
+        document.querySelector('button').disabled = true;
+
+        // Show initial status
+        showStatus("🤖 正在处理您的请求 <span class='dot-flashing'></span>");
+
+        try {
+          // 检查是否使用 Transformers.js 模式
+          const embeddingMode = window.APP_CONFIG.EMBEDDING_MODE || "local";
+          
+          if (embeddingMode === "transformersjs" && window.embeddingGenerator) {
+            // 使用 Transformers.js 生成嵌入
+            showStatus("🧠 正在使用 Transformers.js 生成嵌入 <span class='dot-flashing'></span>");
+            
+            // 生成嵌入向量
+            const output = await window.embeddingGenerator(userInput, { pooling: 'mean', normalize: true });
+            const embeddingArray = Array.from(output.data);
+            
+            // 将嵌入向量传递给 Pyodide
+            pyodide.globals.set("js_embedding", embeddingArray);
+            
+            // 调用 Python 函数处理嵌入向量
+            await pyodide.runPythonAsync(`
+                import numpy as np
+                # 使用 JavaScript 传递的嵌入向量
+                js_embedding = np.array(js_embedding, dtype=np.float32)
+                # 归一化
+                norm = np.linalg.norm(js_embedding)
+                if norm > 0:
+                    js_embedding /= norm
+                # 替换全局向量用于后续处理
+                vectors_global = vectors
+                # 计算相似度
+                sims = np.dot(js_embedding, vectors_global.T)[0]
+                top_idx = sims.argsort()[-3:][::-1]
+                # 获取相关文档
+                relevant_docs = [docs_store[i] for i in top_idx]
+                # 将结果存储为全局变量供后续使用
+                relevant_docs_global = relevant_docs
+            `);
+            
+            // 继续处理用户输入
+            const result = await pyodide.runPythonAsync(`
+                await main_function(${JSON.stringify(userInput)})
+            `);
+            
+            // Clear status
+            hideStatus();
+            
+            // Start streaming the response
+            streamOutput("🤖 助手: " + result, "assistant");
+          } else {
+            // 使用默认的本地 API 模式
+            const result = await pyodide.runPythonAsync(`
+                await main_function(${JSON.stringify(userInput)})
+            `);
+            
+            // Clear status
+            hideStatus();
+            
+            // Start streaming the response
+            streamOutput("🤖 助手: " + result, "assistant");
+          }
+        } catch (err) {
+          // Clear status
+          hideStatus();
+          
+          logOutput("⚠️ 错误: " + err, "error");
+          // Re-enable input on error
+          document.getElementById("inputBox").disabled = false;
+          document.querySelector('button').disabled = false;
+        }
+      }
+
+      document.getElementById("inputBox").addEventListener("keydown", function(event) {
+          if (event.key === "Enter") {
+              event.preventDefault(); // prevent newline in input
+              sendToPyodide();
+          }
+      });
+
+      function logOutput(message, type="assistant") {
+          const out = document.getElementById("outputBox");
+
+          // Create a span element for message
+          const span = document.createElement("span");
+          span.textContent = message;
+
+          if (type === "user") {
+              span.style.color = "#1E90FF"; // blue for 用户
+              span.style.fontWeight = "bold";
+          } else if (type === "assistant") {
+              span.style.color = "#32CD32"; // green for 助手
+          } else if (type === "error") {
+              span.style.color = "#FF4500"; // red for errors
+              span.style.fontWeight = "bold";
+          }
+
+          out.appendChild(span);
+          out.appendChild(document.createElement("br")); // line break
+          out.appendChild(document.createElement("br")); // extra spacing
+
+          out.scrollTop = out.scrollHeight; // auto-scroll
+      }
+      
+      function streamOutput(message, type) {
+          isStreaming = true;
+          const out = document.getElementById("outputBox");
+          
+          // Create a span for the message
+          const span = document.createElement("span");
+          if (type === "assistant") {
+              span.style.color = "#32CD32"; // green for 助手
+          }
+          
+          out.appendChild(span);
+          
+          // Create a blinking cursor
+          const cursor = document.createElement("span");
+          cursor.className = "typing-cursor";
+          out.appendChild(cursor);
+          
+          let i = 0;
+          currentStream = setInterval(() => {
+              if (i < message.length) {
+                  span.textContent += message[i];
+                  i++;
+                  out.scrollTop = out.scrollHeight; // auto-scroll
+              } else {
+                  // Finished streaming
+                  clearInterval(currentStream);
+                  currentStream = null;
+                  isStreaming = false;
+                  
+                  // Remove the cursor
+                  cursor.remove();
+                  
+                  // Add line breaks
+                  out.appendChild(document.createElement("br"));
+                  out.appendChild(document.createElement("br"));
+                  
+                  // Re-enable input
+                  document.getElementById("inputBox").disabled = false;
+                  document.querySelector('button').disabled = false;
+                  document.getElementById("inputBox").focus();
+              }
+          }, 30); // Adjust speed as needed (milliseconds per character)
+      }
+      
+      function showStatus(message) {
+          // Remove any existing status
+          hideStatus();
+          
+          const out = document.getElementById("outputBox");
+          const statusElement = document.createElement("div");
+          statusElement.id = "status-indicator";
+          statusElement.className = "status-indicator";
+          statusElement.innerHTML = message;
+          
+          out.appendChild(statusElement);
+          out.scrollTop = out.scrollHeight;
+      }
+      
+      function hideStatus() {
+          const statusElement = document.getElementById("status-indicator");
+          if (statusElement) {
+              statusElement.remove();
+          }
+      }
+
+    </script>
+  </body>
+</html>
