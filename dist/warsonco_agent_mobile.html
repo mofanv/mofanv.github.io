@@ -1050,89 +1050,115 @@ async def main_function(user_input: str) -> str:
       // Start checking for API key when page loads
       checkApiKey();
 
-      // === Chat UI functions ===
-      async function sendToPyodide() {
-        alert('Button clicked! Starting processing...');  // Temporary debug - remove after testing
-
-        if (isMobile && userInput.length > 20) {  // Rough heuristic for complex queries
-        showStatus("⚠️ 移动设备处理较慢，请耐心等待...");
+    async function sendToPyodide() {
+    alert('Button clicked! Starting processing...');  // Existing - confirms entry
+    
+    if (isStreaming) {
+        // If already streaming, cancel the current stream
+        if (currentStream) {
+        clearInterval(currentStream);
+        currentStream = null;
         }
-
-        if (isStreaming) {
-          // If already streaming, cancel the current stream
-          if (currentStream) {
-            clearInterval(currentStream);
-            currentStream = null;
-          }
-          // Remove the cursor
-          const cursor = document.querySelector('.typing-cursor');
-          if (cursor) cursor.remove();
-          isStreaming = false;
+        // Remove the cursor
+        const cursor = document.querySelector('.typing-cursor');
+        if (cursor) cursor.remove();
+        isStreaming = false;
+        alert('Alert 1: Streaming canceled (if any)');  // Temp: Check if this shows
+    }
+    
+    const userInput = document.getElementById("inputBox").value;
+    if (!userInput.trim()) {
+        alert('Alert 2: Empty input - exiting');  // Temp
+        return;
+    }
+    
+    alert('Alert 3: Got user input - about to log it');  // Temp: Before logOutput
+    
+    logOutput("👤 用户: " + userInput, "user");
+    alert('Alert 4: User message logged to output');  // Temp: After logOutput
+    
+    // Disable input during processing
+    document.getElementById("inputBox").value = "";
+    document.getElementById("inputBox").disabled = true;
+    document.querySelector('button').disabled = true;
+    alert('Alert 5: Input disabled and cleared');  // Temp
+    
+    // Show initial status
+    showStatus("🤖 正在处理您的请求 <span class='dot-flashing'></span>");
+    alert('Alert 6: Initial status shown');  // Temp
+    
+    try {
+        alert('Alert 7: Entering try block');  // Temp
+        
+        // Check which embedding mode to use
+        let embeddingMode = window.APP_CONFIG.EMBEDDING_MODE || "local";
+        
+        // Force local mode on mobile to avoid API hangs
+        if (isMobile) {
+        embeddingMode = "local";
+        console.log("Mobile detected - forcing local embedding mode");
         }
         
-        const userInput = document.getElementById("inputBox").value;
-        if (!userInput.trim()) return;
+        alert('Alert 8: Embedding mode set to ' + embeddingMode);  // Temp
         
-        logOutput("👤 用户: " + userInput, "user");
-
-        // Disable input during processing
-        document.getElementById("inputBox").value = "";
-        document.getElementById("inputBox").disabled = true;
-        document.querySelector('button').disabled = true;
-
-        // Show initial status
-        showStatus("🤖 正在处理您的请求 <span class='dot-flashing'></span>");
-
+        if (embeddingMode === "transformersjs" && window.embeddingGenerator) {
+        // Use Transformers.js to generate embeddings
+        showStatus("🧠 正在使用 Transformers.js 生成嵌入 <span class='dot-flashing'></span>");
+        alert('Alert 9: Starting Transformers.js embedding');  // Temp
+        
+        // Generate embedding vector
+        const output = await window.embeddingGenerator(userInput, { pooling: 'mean', normalize: true });
+        const embeddingArray = Array.from(output.data);
+        
+        // Pass embedding vector to Pyodide
+        pyodide.globals.set("js_embedding", embeddingArray);
+        alert('Alert 10: Transformers.js embedding complete');  // Temp
+        } else if (embeddingMode === "openai") {
+        // Use OpenAI to generate embeddings
+        showStatus("🧠 正在使用 OpenAI API 生成嵌入 <span class='dot-flashing'></span>");
+        alert('Alert 11: Starting OpenAI embedding');  // Temp
+        
         try {
-          // Check which embedding mode to use
-          const embeddingMode = window.APP_CONFIG.EMBEDDING_MODE || "local";
-          
-          if (embeddingMode === "transformersjs" && window.embeddingGenerator) {
-            // Use Transformers.js to generate embeddings
-            showStatus("🧠 正在使用 Transformers.js 生成嵌入 <span class='dot-flashing'></span>");
-            
-            // Generate embedding vector
-            const output = await window.embeddingGenerator(userInput, { pooling: 'mean', normalize: true });
-            const embeddingArray = Array.from(output.data);
-            
+            const embeddingArray = await getOpenAIEmbedding(userInput);
             // Pass embedding vector to Pyodide
-            pyodide.globals.set("js_embedding", embeddingArray);
-          } else if (embeddingMode === "openai") {
-            // Use OpenAI to generate embeddings
-            showStatus("🧠 正在使用 OpenAI API 生成嵌入 <span class='dot-flashing'></span>");
-            
-            try {
-              const embeddingArray = await getOpenAIEmbedding(userInput);
-              console.log(embeddingArray.length);
-              // Pass embedding vector to Pyodide
-              pyodide.globals.set("js_openai_embedding", embeddingArray);
-            } catch (error) {
-              console.error("Failed to get OpenAI embedding:", error);
-              // Fall back to local mode
-              showStatus("⚠️ OpenAI嵌入失败，使用本地模式");
-            }
-          }
-          
-          // Process user input
-          const result = await pyodide.runPythonAsync(`
-              await main_function(${JSON.stringify(userInput)})
-          `);
-          
-          // Clear status
-          hideStatus();
-          
-          // Start streaming the response
-          streamOutput("🤖 助手: " + result, "assistant");
-        } catch (err) {
-          // Clear status
-          hideStatus();
-          
-          logOutput("⚠️ 错误: " + err, "error");
-          // Re-enable input on error
-          document.getElementById("inputBox").disabled = false;
-          document.querySelector('button').disabled = false;
+            pyodide.globals.set("js_openai_embedding", embeddingArray);
+            alert('Alert 12: OpenAI embedding complete');  // Temp
+        } catch (error) {
+            console.error("Failed to get OpenAI embedding:", error);
+            // Fall back to local mode
+            showStatus("⚠️ OpenAI嵌入失败，使用本地模式");
+            alert('Alert 13: OpenAI failed - falling back');  // Temp
         }
-      }
+        }
+        
+        alert('Alert 14: Embedding done - about to call Python');  // Temp
+        
+        // Process user input
+        const result = await pyodide.runPythonAsync(`
+            await main_function(${JSON.stringify(userInput)})
+        `);
+        
+        alert('Alert 15: Python execution complete');  // Temp
+        
+        // Clear status
+        hideStatus();
+        
+        // Start streaming the response
+        streamOutput("🤖 助手: " + result, "assistant");
+        alert('Alert 16: Response streamed');  // Temp
+    } catch (err) {
+        alert('Alert 17: Caught error - ' + err.message);  // Temp: Will show if exception
+        // Clear status
+        hideStatus();
+        
+        logOutput("⚠️ 错误: " + err, "error");
+        // Re-enable input on error
+        document.getElementById("inputBox").disabled = false;
+        document.querySelector('button').disabled = false;
+    }
+    
+    alert('Alert 18: Function ending');  // Temp: If reaches end
+    }
 
       document.getElementById("inputBox").addEventListener("keydown", function(event) {
           if (event.key === 'Enter') {
