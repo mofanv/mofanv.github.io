@@ -201,6 +201,18 @@
             transition: width 0.3s ease;
         }
         
+        /* Skip button for Transformers.js */
+        #skipTransformers {
+            margin-top: 15px;
+            padding: 8px 16px;
+            background: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
         /* Responsive adjustments */
         @media (max-width: 480px) {
             body {
@@ -251,7 +263,7 @@
     </div>
     
     <div class="container">
-        <h2>产品客服机器人 1958</h2>
+        <h2>产品客服机器人 1042</h2>
         
         <div class="input-group">
             <input id="inputBox" type="text" placeholder="输入你的问题..." disabled />
@@ -280,6 +292,7 @@
         <div class="progress-bar">
             <div class="progress-fill" id="progressFill"></div>
         </div>
+        <button id="skipTransformers">跳过模型加载</button>
     </div>
 
     <script type="module">
@@ -343,6 +356,17 @@
             }
         }
 
+        // Add event listener for skip button
+        document.getElementById('skipTransformers').addEventListener('click', function() {
+            console.log("User skipped Transformers.js loading");
+            window.transformersInitialized = false;
+            document.getElementById('transformersLoading').style.display = 'none';
+            const loadingMessage = document.getElementById('loadingMessage');
+            if (loadingMessage) {
+                loadingMessage.innerHTML = 'Transformers.js已跳过，使用备用模式 <span class="dot-flashing"></span>';
+            }
+        });
+
         // Initialize Transformers.js with a timeout to prevent hanging 
         const transformersInitPromise = initTransformers();
         
@@ -357,7 +381,7 @@
                     loadingMessage.innerHTML = 'Transformers.js加载超时，使用备用模式 <span class="dot-flashing"></span>';
                 }
                 resolve(false);
-            }, isMobile ? 90000 : 45000); // 90 seconds timeout on mobile, 45 on desktop
+            }, isMobile ? 120000 : 60000); // Increased timeout: 120 seconds on mobile, 60 on desktop
         });
 
         // Race between initialization and timeout
@@ -471,7 +495,7 @@
           
           // Wait for Transformers.js to initialize or timeout
           let waitTime = 0;
-          while (window.transformersInitialized === undefined && waitTime < 90000) {
+          while (window.transformersInitialized === undefined && waitTime < 120000) {
             await new Promise(r => setTimeout(r, 100));
             waitTime += 100;
           }
@@ -500,38 +524,7 @@
         // Pass embedding mode to Python
         pyodide.globals.set("JS_EMBEDDING_MODE", JS_EMBEDDING_MODE);
 
-        // --- 1. Fetch embeddings.npy with progress tracking ---
-        updateStatus("📥 正在加载嵌入数据...");
-        try {
-          const npyResp = await fetchWithProgress("https://mofanv.github.io/dist/embeddings.npy", 
-            "embeddings.npy", "嵌入数据");
-          if (!npyResp.ok) throw new Error("加载RAG Embedding数据文件失败，请查看是否有访问权限。");
-          const npyBuffer = await npyResp.arrayBuffer();
-          pyodide.FS.writeFile("/embeddings.npy", new Uint8Array(npyBuffer));
-        } catch (error) {
-          console.error("Error loading embeddings:", error);
-          updateStatus("❌ 加载嵌入数据失败");
-          // Continue with a fallback - create empty embeddings
-          const fallbackEmbeddings = new Float32Array(384); // Default size
-          pyodide.FS.writeFile("/embeddings.npy", fallbackEmbeddings);
-        }
-
-        // --- 2. Fetch embeddings_docs.json with progress tracking ---
-        updateStatus("📥 正在加载文档数据...");
-        try {
-          const jsonResp = await fetchWithProgress("https://mofanv.github.io/dist/embeddings_docs.json", 
-            "embeddings_docs.json", "文档数据");
-          if (!jsonResp.ok) throw new Error("加载RAG Docs数据文件失败，请查看是否有访问权限。");
-          const jsonText = await jsonResp.text();
-          pyodide.FS.writeFile("/embeddings_docs.json", jsonText);
-        } catch (error) {
-          console.error("Error loading docs:", error);
-          updateStatus("❌ 加载文档数据失败");
-          // Continue with a fallback - create empty docs
-          const fallbackDocs = JSON.stringify([{text: "No data available", metadata: {url: "N/A"}}]);
-          pyodide.FS.writeFile("/embeddings_docs.json", fallbackDocs);
-        }
-
+        // Install packages first so we can use NumPy for fallback
         updateStatus("📦 正在安装Python包...");
         await pyodide.loadPackage("micropip");
         
@@ -546,6 +539,41 @@
 
             await micropip.install(${JSON.stringify(packagesToInstall)}, keep_going=True)
         `));
+        
+        // --- 1. Fetch embeddings.npy with progress tracking ---
+        updateStatus("📥 正在加载嵌入数据...");
+        try {
+          const npyResp = await fetchWithProgress("https://mofanv.github.io/dist/embeddings.npy", 
+            "embeddings.npy", "嵌入数据");
+          if (!npyResp.ok) throw new Error("加载RAG Embedding数据文件失败，请查看是否有访问权限。");
+          const npyBuffer = await npyResp.arrayBuffer();
+          pyodide.FS.writeFile("/embeddings.npy", new Uint8Array(npyBuffer));
+        } catch (error) {
+          console.error("Error loading embeddings:", error);
+          updateStatus("❌ 加载嵌入数据失败，使用备用数据");
+          // Create a valid fallback .npy file using NumPy
+          await pyodide.runPythonAsync(`
+            import numpy as np
+            fallback_embeddings = np.zeros((1, 384), dtype=np.float32)
+            np.save("/embeddings.npy", fallback_embeddings)
+          `);
+        }
+
+        // --- 2. Fetch embeddings_docs.json with progress tracking ---
+        updateStatus("📥 正在加载文档数据...");
+        try {
+          const jsonResp = await fetchWithProgress("https://mofanv.github.io/dist/embeddings_docs.json", 
+            "embeddings_docs.json", "文档数据");
+          if (!jsonResp.ok) throw new Error("加载RAG Docs数据文件失败，请查看是否有访问权限。");
+          const jsonText = await jsonResp.text();
+          pyodide.FS.writeFile("/embeddings_docs.json", jsonText);
+        } catch (error) {
+          console.error("Error loading docs:", error);
+          updateStatus("❌ 加载文档数据失败，使用备用数据");
+          // Continue with a fallback - create empty docs
+          const fallbackDocs = JSON.stringify([{text: "No data available", metadata: {url: "N/A"}}]);
+          pyodide.FS.writeFile("/embeddings_docs.json", fallbackDocs);
+        }
         
         await pyodide.runPythonAsync(`
             import os
@@ -624,7 +652,7 @@ LLM_MODE = os.getenv("LLM_MODE", "deepseek")
 EMBEDDING_MODE = os.getenv("EMBEDDING_MODE", "local")
 
 if LLM_MODE == "deepseek":
-    llm = ChatDeepSeek(model="deepseek-chat", timeout=120, max_retries=2)
+    llm = ChatDeepSeek(model="deepseek-chat", timeout=60)
     print("Using DeepSeek as the Agent LLM...")
 else:
     raise ValueError(f"Unsupported LLM_MODE: {LLM_MODE}")
@@ -639,36 +667,17 @@ DOCS_FILE = "/embeddings_docs.json"
 try:
     vectors = np.load(EMBEDDINGS_FILE, allow_pickle=True)
     vectors = np.array(vectors, dtype=np.float32)
-    # Check if vectors are 2D and normalize
-    if len(vectors.shape) == 2:
-        norms = np.linalg.norm(vectors, axis=1, keepdims=True)
-        vectors /= (norms + 1e-10)
-    else:
-        # Handle 1D array (single embedding)
-        norms = np.linalg.norm(vectors)
-        if norms > 0:
-            vectors = vectors / norms
-        vectors = vectors.reshape(1, -1)  # Make it 2D
-except Exception as e:
-    print(f"Error loading embeddings: {e}")
+    # Normalize vectors
+    norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+    vectors /= (norms + 1e-10)
+except:
     vectors = np.zeros((1, 384), dtype=np.float32)  # Fallback
 
 # Load metadata/docs
 try:
     with open(DOCS_FILE, "r", encoding="utf-8") as f:
-        docs_data = json.load(f)
-        docs_store = []
-        for d in docs_data:
-            # Ensure each document has proper structure
-            if isinstance(d, dict):
-                text = d.get("text", "No content")
-                metadata = d.get("metadata", {})
-                docs_store.append(Document(page_content=text, metadata=metadata))
-            else:
-                # Handle case where d might be a string or other format
-                docs_store.append(Document(page_content=str(d), metadata={}))
-except Exception as e:
-    print(f"Error loading docs: {e}")
+        docs_store = [Document(page_content=d["text"], metadata=d["metadata"]) for d in json.load(f)]
+except:
     docs_store = [Document(page_content="No data available", metadata={})]  # Fallback
 
 def get_embedding(text: str):
@@ -679,14 +688,11 @@ def get_embedding(text: str):
             # Use Transformers.js embedding from JavaScript
             import numpy as np
             emb = np.array(js_embedding, dtype=np.float32)
-            # Ensure proper shape
-            if len(emb.shape) == 1:
-                emb = emb.reshape(1, -1)
             # Normalize
             norm = np.linalg.norm(emb)
             if norm > 0:
                 emb /= norm
-            return emb.flatten()  # Return 1D array for consistency
+            return emb
         else:
             # Fallback to simple embedding for mobile
             import numpy as np
@@ -708,35 +714,35 @@ def get_embedding(text: str):
             return emb
     except Exception as e:
         print(f"[Embedding Error] {e}")
-        # Return zero vector of appropriate dimension
-        if vectors.size > 0:
-            return np.zeros(vectors.shape[1], dtype=np.float32)
-        else:
-            return np.zeros(384, dtype=np.float32)
+        return np.zeros(vectors.shape[1], dtype=np.float32) if vectors.size > 0 else np.zeros(384, dtype=np.float32)
 
 def query_kb(query: str, k: int = 3):
     """Query the knowledge base"""
     updateStatus("📚 正在搜索知识库...")
     q_vec = get_embedding(query)
     
-    # Ensure q_vec is 1D and has the right dimension
-    if len(q_vec.shape) > 1:
-        q_vec = q_vec.flatten()
+    # Ensure q_vec is 2D for consistent dot product
+    if q_vec.ndim == 1:
+        q_vec = q_vec.reshape(1, -1)
     
-    # Check if vectors are available and have compatible dimensions
-    if vectors.size == 0 or vectors.shape[1] != q_vec.shape[0]:
+    # Check if vectors are available
+    if vectors.size == 0 or vectors.shape[1] != q_vec.shape[1]:
         updateStatus("⚠️ 知识库未加载，使用默认回复")
         return [Document(page_content="知识库暂不可用，请稍后再试", metadata={"url": "N/A"})]
     
     try:
-        # Reshape q_vec to 2D for dot product
-        q_vec_2d = q_vec.reshape(1, -1)
-        sims = np.dot(q_vec_2d, vectors.T)[0]
+        # Fixed similarity computation - removed erroneous [0]
+        sims = np.dot(q_vec, vectors.T)
+        
+        # Handle both 1D and 2D results
+        if sims.ndim > 1:
+            sims = sims[0]
+            
         top_idx = sims.argsort()[-k:][::-1]
         updateStatus("✅ 已找到相关文档")
-        return [docs_store[i] for i in top_idx if i < len(docs_store)]
+        return [docs_store[i] for i in top_idx]
     except Exception as e:
-        print(f"Error querying KB: {e}")
+        print(f"Error in similarity computation: {e}")
         # Return empty results on error
         return []
 
@@ -745,22 +751,16 @@ def query_kb(query: str, k: int = 3):
 def search_knowledge(query: str):
     """检索知识库相关信息"""
     updateStatus("🔎 正在搜索知识库...")
-    try:
-        docs = query_kb(query, k=3)
-        return [f"{d.page_content}\\n来源: {d.metadata.get('url','未知来源')}" for d in docs]
-    except Exception as e:
-        return f"搜索知识库时出错: {str(e)}"
+    docs = query_kb(query, k=3)
+    return [f"{d.page_content}\\n来源: {d.metadata.get('url','未知来源')}" for d in docs]
 
 @tool
 def get_price_info(query: str):
     """检索价格相关信息"""
     updateStatus("💰 正在搜索价格信息...")
-    try:
-        docs = query_kb(query, k=3)
-        price_docs = [d for d in docs if "价" in d.page_content or "￥" in d.page_content or "price" in d.page_content.lower()]
-        return [f"{d.page_content}\\n来源: {d.metadata.get('url','未知来源')}" for d in price_docs] if price_docs else "未找到相关价格信息"
-    except Exception as e:
-        return f"搜索价格信息时出错: {str(e)}"
+    docs = query_kb(query, k=3)
+    price_docs = [d for d in docs if "价" in d.page_content or "￥" in d.page_content]
+    return [f"{d.page_content}\\n来源: {d.metadata.get('url','未知来源')}" for d in price_docs] if price_docs else "未找到相关价格信息"
 
 # ===================== AGENT SETUP =====================
 tools = [search_knowledge, get_price_info]
@@ -781,8 +781,7 @@ agent = initialize_agent(
     memory=memory,
     verbose=False,  # Reduced verbosity for mobile
     max_iterations=3,  # Limit iterations for mobile
-    early_stopping_method="generate",
-    handle_parsing_errors=True  # Better error handling
+    early_stopping_method="generate"
 )
 
 # ===================== AGENT INTERFACE =====================
@@ -798,25 +797,30 @@ class ProductAssistantAgent:
         if vectors.size == 0:
             return True
             
-        # Ensure vectors are 2D and q_vec is 1D
-        vecs = vectors.astype(np.float32)
-        if len(q_vec.shape) > 1:
-            q_vec = q_vec.flatten()
+        # Ensure q_vec is 2D for consistent dot product
+        if q_vec.ndim == 1:
+            q_vec = q_vec.reshape(1, -1)
+            
+        vecs = vectors.astype(np.float32)  # ensure numeric
 
-        if q_vec.shape[0] != vecs.shape[1]:
+        if q_vec.shape[1] != vecs.shape[1]:
             return False
 
         try:
             updateStatus("📊 正在计算相似度分数...")
-            # Reshape q_vec to 2D for dot product
-            q_vec_2d = q_vec.reshape(1, -1)
-            sims = np.dot(q_vec_2d, vecs.T)
+            # Fixed similarity computation - removed erroneous [0]
+            sims = np.dot(q_vec, vecs.T)
+            
+            # Handle both 1D and 2D results
+            if sims.ndim > 1:
+                sims = sims[0]
+                
             if sims.size == 0:
                 return False
             max_sim = float(np.max(sims))
             return max_sim >= float(threshold)
-        except (TypeError, ValueError, Exception) as e:
-            print(f"Similarity calculation error: {e}")
+        except (TypeError, ValueError) as e:
+            print(f"Error in relevance check: {e}")
             return False
 
     async def process_message(self, message: str):
@@ -853,8 +857,14 @@ agent_instance = ProductAssistantAgent(agent_llm=agent)
 # ===================== MAIN FUNCTION =====================
 async def main_function(user_input: str) -> str:
     updateStatus("🤖 正在处理您的请求...")
-    res = await agent_instance.process_message(user_input)
-    return res
+    try:
+        res = await agent_instance.process_message(user_input)
+        return res
+    except Exception as e:
+        error_msg = str(e)
+        if "invalid response" in error_msg.lower() or "api" in error_msg.lower():
+            return "DeepSeek API连接出现问题，请检查网络连接和API密钥。"
+        return f"处理请求时出错: {error_msg}"
           `;
       }
       
@@ -896,18 +906,12 @@ async def main_function(user_input: str) -> str:
             // Use Transformers.js to generate embeddings
             showStatus("🧠 正在使用 Transformers.js 生成嵌入 <span class='dot-flashing'></span>");
             
-            try {
-              // Generate embedding vector
-              const output = await window.embeddingGenerator(userInput, { pooling: 'mean', normalize: true });
-              const embeddingArray = Array.from(output.data);
-              
-              // Pass embedding vector to Pyodide
-              pyodide.globals.set("js_embedding", embeddingArray);
-            } catch (embedError) {
-              console.error("Transformers.js embedding error:", embedError);
-              // Fallback to local embedding
-              pyodide.globals.set("js_embedding", []);
-            }
+            // Generate embedding vector
+            const output = await window.embeddingGenerator(userInput, { pooling: 'mean', normalize: true });
+            const embeddingArray = Array.from(output.data);
+            
+            // Pass embedding vector to Pyodide
+            pyodide.globals.set("js_embedding", embeddingArray);
           }
           
           // Process user input
@@ -1001,7 +1005,7 @@ async def main_function(user_input: str) -> str:
                   // Re-enable input
                   document.getElementById("inputBox").disabled = false;
                   document.querySelector('button').disabled = false;
-                  document.getElementById("inputBox").focus();
+                  document.getElementById('inputBox').focus();
               }
           }, 30); // Adjust speed as needed (milliseconds per character)
       }
