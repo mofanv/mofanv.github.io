@@ -1093,13 +1093,6 @@ async def main_function(user_input: str) -> str:
         
         // Check which embedding mode to use
         let embeddingMode = window.APP_CONFIG.EMBEDDING_MODE || "local";
-        
-        // Force local mode on mobile to avoid API hangs
-        if (isMobile) {
-        embeddingMode = "local";
-        console.log("Mobile detected - forcing local embedding mode");
-        }
-        
 
         if (embeddingMode === "transformersjs" && window.embeddingGenerator) {
         // Use Transformers.js to generate embeddings
