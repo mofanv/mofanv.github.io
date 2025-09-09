@@ -201,18 +201,6 @@
             transition: width 0.3s ease;
         }
         
-        /* Skip button for Transformers.js */
-        #skipTransformers {
-            margin-top: 15px;
-            padding: 8px 16px;
-            background: #e74c3c;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 14px;
-        }
-        
         /* Responsive adjustments */
         @media (max-width: 480px) {
             body {
@@ -263,7 +251,7 @@
     </div>
     
     <div class="container">
-        <h2>产品客服机器人 1042</h2>
+        <h2>产品客服机器人</h2>
         
         <div class="input-group">
             <input id="inputBox" type="text" placeholder="输入你的问题..." disabled />
@@ -292,7 +280,6 @@
         <div class="progress-bar">
             <div class="progress-fill" id="progressFill"></div>
         </div>
-        <button id="skipTransformers">跳过模型加载</button>
     </div>
 
     <script type="module">
@@ -356,24 +343,12 @@
             }
         }
 
-        // Add event listener for skip button
-        document.getElementById('skipTransformers').addEventListener('click', function() {
-            console.log("User skipped Transformers.js loading");
-            window.transformersInitialized = false;
-            document.getElementById('transformersLoading').style.display = 'none';
-            const loadingMessage = document.getElementById('loadingMessage');
-            if (loadingMessage) {
-                loadingMessage.innerHTML = 'Transformers.js已跳过，使用备用模式 <span class="dot-flashing"></span>';
-            }
-        });
-
         // Initialize Transformers.js with a timeout to prevent hanging 
         const transformersInitPromise = initTransformers();
         
         // Set a timeout to prevent the initialization from hanging indefinitely
         const timeoutPromise = new Promise((resolve) => {
             setTimeout(() => {
-                console.warn("Transformers.js initialization taking too long, continuing without it");
                 // Show error message but continue
                 document.getElementById('transformersLoading').style.display = 'none';
                 const loadingMessage = document.getElementById('loadingMessage');
@@ -381,7 +356,7 @@
                     loadingMessage.innerHTML = 'Transformers.js加载超时，使用备用模式 <span class="dot-flashing"></span>';
                 }
                 resolve(false);
-            }, isMobile ? 120000 : 60000); // Increased timeout: 120 seconds on mobile, 60 on desktop
+            }, isMobile ? 90000 : 45000); // 90 seconds timeout on mobile, 45 on desktop
         });
 
         // Race between initialization and timeout
@@ -495,7 +470,7 @@
           
           // Wait for Transformers.js to initialize or timeout
           let waitTime = 0;
-          while (window.transformersInitialized === undefined && waitTime < 120000) {
+          while (window.transformersInitialized === undefined && waitTime < 90000) {
             await new Promise(r => setTimeout(r, 100));
             waitTime += 100;
           }
@@ -524,22 +499,6 @@
         // Pass embedding mode to Python
         pyodide.globals.set("JS_EMBEDDING_MODE", JS_EMBEDDING_MODE);
 
-        // Install packages first so we can use NumPy for fallback
-        updateStatus("📦 正在安装Python包...");
-        await pyodide.loadPackage("micropip");
-        
-        // Install only essential packages for mobile 
-        const packagesToInstall = ["requests==2.32.5", "numpy", "langchain", "langchain_deepseek"];
-        
-        console.log(await pyodide.runPythonAsync(`
-            import sys
-            sys.version
-
-            import micropip
-
-            await micropip.install(${JSON.stringify(packagesToInstall)}, keep_going=True)
-        `));
-        
         // --- 1. Fetch embeddings.npy with progress tracking ---
         updateStatus("📥 正在加载嵌入数据...");
         try {
@@ -550,13 +509,10 @@
           pyodide.FS.writeFile("/embeddings.npy", new Uint8Array(npyBuffer));
         } catch (error) {
           console.error("Error loading embeddings:", error);
-          updateStatus("❌ 加载嵌入数据失败，使用备用数据");
-          // Create a valid fallback .npy file using NumPy
-          await pyodide.runPythonAsync(`
-            import numpy as np
-            fallback_embeddings = np.zeros((1, 384), dtype=np.float32)
-            np.save("/embeddings.npy", fallback_embeddings)
-          `);
+          updateStatus("❌ 加载嵌入数据失败");
+          // Continue with a fallback - create empty embeddings
+          const fallbackEmbeddings = new Float32Array(384); // Default size
+          pyodide.FS.writeFile("/embeddings.npy", fallbackEmbeddings);
         }
 
         // --- 2. Fetch embeddings_docs.json with progress tracking ---
@@ -569,12 +525,27 @@
           pyodide.FS.writeFile("/embeddings_docs.json", jsonText);
         } catch (error) {
           console.error("Error loading docs:", error);
-          updateStatus("❌ 加载文档数据失败，使用备用数据");
+          updateStatus("❌ 加载文档数据失败");
           // Continue with a fallback - create empty docs
           const fallbackDocs = JSON.stringify([{text: "No data available", metadata: {url: "N/A"}}]);
           pyodide.FS.writeFile("/embeddings_docs.json", fallbackDocs);
         }
-        
+
+        updateStatus("📦 正在安装Python包...");
+        await pyodide.loadPackage("micropip");
+
+        // Install only essential packages for mobile 
+        const packagesToInstall = ["requests==2.32.5", "numpy", "langchain", "langchain_deepseek"];
+
+        console.log(await pyodide.runPythonAsync(`
+            import sys
+            sys.version
+
+            import micropip
+
+            await micropip.install(${JSON.stringify(packagesToInstall)}, keep_going=True)
+        `));
+
         await pyodide.runPythonAsync(`
             import os
             os.environ['DEEPSEEK_API_KEY'] = "${JS_DEEPSEEK_API_KEY}"
@@ -721,28 +692,17 @@ def query_kb(query: str, k: int = 3):
     updateStatus("📚 正在搜索知识库...")
     q_vec = get_embedding(query)
     
-    # Ensure q_vec is 2D for consistent dot product
-    if q_vec.ndim == 1:
-        q_vec = q_vec.reshape(1, -1)
-    
     # Check if vectors are available
-    if vectors.size == 0 or vectors.shape[1] != q_vec.shape[1]:
+    if vectors.size == 0 or vectors.shape[1] != q_vec.shape[0]:
         updateStatus("⚠️ 知识库未加载，使用默认回复")
         return [Document(page_content="知识库暂不可用，请稍后再试", metadata={"url": "N/A"})]
     
     try:
-        # Fixed similarity computation - removed erroneous [0]
-        sims = np.dot(q_vec, vectors.T)
-        
-        # Handle both 1D and 2D results
-        if sims.ndim > 1:
-            sims = sims[0]
-            
+        sims = np.dot(q_vec, vectors.T)[0]
         top_idx = sims.argsort()[-k:][::-1]
         updateStatus("✅ 已找到相关文档")
         return [docs_store[i] for i in top_idx]
-    except Exception as e:
-        print(f"Error in similarity computation: {e}")
+    except:
         # Return empty results on error
         return []
 
@@ -797,30 +757,19 @@ class ProductAssistantAgent:
         if vectors.size == 0:
             return True
             
-        # Ensure q_vec is 2D for consistent dot product
-        if q_vec.ndim == 1:
-            q_vec = q_vec.reshape(1, -1)
-            
         vecs = vectors.astype(np.float32)  # ensure numeric
 
-        if q_vec.shape[1] != vecs.shape[1]:
+        if q_vec.shape[0] != vecs.shape[1]:
             return False
 
         try:
             updateStatus("📊 正在计算相似度分数...")
-            # Fixed similarity computation - removed erroneous [0]
             sims = np.dot(q_vec, vecs.T)
-            
-            # Handle both 1D and 2D results
-            if sims.ndim > 1:
-                sims = sims[0]
-                
             if sims.size == 0:
                 return False
             max_sim = float(np.max(sims))
             return max_sim >= float(threshold)
-        except (TypeError, ValueError) as e:
-            print(f"Error in relevance check: {e}")
+        except (TypeError, ValueError):
             return False
 
     async def process_message(self, message: str):
@@ -857,14 +806,8 @@ agent_instance = ProductAssistantAgent(agent_llm=agent)
 # ===================== MAIN FUNCTION =====================
 async def main_function(user_input: str) -> str:
     updateStatus("🤖 正在处理您的请求...")
-    try:
-        res = await agent_instance.process_message(user_input)
-        return res
-    except Exception as e:
-        error_msg = str(e)
-        if "invalid response" in error_msg.lower() or "api" in error_msg.lower():
-            return "DeepSeek API连接出现问题，请检查网络连接和API密钥。"
-        return f"处理请求时出错: {error_msg}"
+    res = await agent_instance.process_message(user_input)
+    return res
           `;
       }
       
@@ -1005,7 +948,7 @@ async def main_function(user_input: str) -> str:
                   // Re-enable input
                   document.getElementById("inputBox").disabled = false;
                   document.querySelector('button').disabled = false;
-                  document.getElementById('inputBox').focus();
+                  document.getElementById("inputBox").focus();
               }
           }, 30); // Adjust speed as needed (milliseconds per character)
       }
