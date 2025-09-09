@@ -299,7 +299,7 @@
         
         <div class="input-group">
             <input id="inputBox" type="text" placeholder="输入你的问题..." disabled />
-            <button onclick="sendToPyodide()" disabled>发送</button>
+            <button id="sendButton" disabled>发送</button>
         </div>
 
         <div id="outputBox"></div>
@@ -1032,12 +1032,27 @@ async def main_function(user_input: str) -> str:
     return res
           `;
       }
+
+        // Attach click event listener for better mobile compatibility
+        document.getElementById('sendButton').addEventListener('click', function(event) {
+            event.preventDefault();  // Prevent any default touch behavior
+            sendToPyodide();
+        });
+
+        // Also ensure Enter key works (already there, but confirm)
+        document.getElementById("inputBox").addEventListener("keydown", function(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                sendToPyodide();
+            }
+        });
       
       // Start checking for API key when page loads
       checkApiKey();
 
       // === Chat UI functions ===
       async function sendToPyodide() {
+        alert('Button clicked! Starting processing...');  // Temporary debug - remove after testing
 
         if (isMobile && userInput.length > 20) {  // Rough heuristic for complex queries
         showStatus("⚠️ 移动设备处理较慢，请耐心等待...");
