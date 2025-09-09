@@ -664,7 +664,10 @@
         const JS_TAVILY_API_KEY = window.APP_CONFIG.TAVILY_API_KEY;
         const JS_OPENAI_API_KEY = window.APP_CONFIG.OPENAI_API_KEY || "";
         const JS_EMBEDDING_MODE = window.APP_CONFIG.EMBEDDING_MODE;
-        window.APP_CONFIG.LLM_TIMEOUT = isMobile ? 180 : 60;
+
+        // Set dynamic timeout based on device
+        const llmTimeout = isMobile ? 180 : 60;  // 3min on mobile, 1min on PC
+        window.APP_CONFIG.LLM_TIMEOUT = llmTimeout;
         
         // Initialize Pyodide with a progress callback
         updateStatus("🔄 正在加载Pyodide...");
@@ -807,7 +810,9 @@ EMBEDDING_MODE = os.getenv("EMBEDDING_MODE", "local")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
 if LLM_MODE == "deepseek":
-    llm = ChatDeepSeek(model="deepseek-chat", timeout=int(os.getenv("LLM_TIMEOUT", "60")))
+    timeout_val = int(os.getenv("LLM_TIMEOUT", "60"))  # Defaults to 60 if not set
+    llm = ChatDeepSeek(model="deepseek-chat", timeout=timeout_val)
+    print(f"Using DeepSeek with timeout: {timeout_val}s")
     print("Using DeepSeek as the Agent LLM...")
 else:
     raise ValueError(f"Unsupported LLM_MODE: {LLM_MODE}")
@@ -983,32 +988,34 @@ class ProductAssistantAgent:
             print(f"[Debug] Sim error: {e}")
             return False
 
+
     async def process_message(self, message: str):
         if not self.is_input_relevant(message):
             return "抱歉，我不太理解您的问题。可以请您描述得更清楚吗？"
 
-        # Run agent with retries
+        # Run agent with retries for timeouts
         updateStatus("🧠 正在思考如何回答...")
-        max_retries = 3
+        max_retries = 5
         for attempt in range(max_retries):
             try:
                 ai_raw = self.agent.invoke({"input": message})
-                break  # Success, exit loop
+                break  # Success
             except Exception as e:
-                if attempt < max_retries - 1:
-                    wait_time = 2 ** attempt  # Exponential backoff: 1s, 2s, 4s
-                    print(f"[Retry {attempt+1}] LLM call failed: {str(e)}. Waiting {wait_time}s...")
-                    import asyncio
-                    await asyncio.sleep(wait_time)
-                    continue
+                error_str = str(e).lower()
+                if "timeout" in error_str or "api" in error_str or "connection" in error_str:
+                    if attempt < max_retries - 1:
+                        wait_time = 2 ** attempt  # Backoff: 1s, 2s, 4s
+                        print(f"[Retry {attempt+1}/{max_retries}] DeepSeek timeout: {e}. Waiting {wait_time}s...")
+                        import asyncio
+                        await asyncio.sleep(wait_time)  # Pyodide supports asyncio.sleep
+                        continue
+                    else:
+                        return "DeepSeek API响应较慢，请稍后重试或检查网络连接。建议使用Wi-Fi并简化查询。"
                 else:
-                    # Final failure
-                    error_msg = str(e)
-                    if "timeout" in error_msg.lower() or "api" in error_msg.lower():
-                        return "DeepSeek API响应较慢，请稍后重试或检查网络连接。"
-                    return f"处理请求时出错: {error_msg}"
+                    # Non-timeout errors (e.g., invalid key) - no retry
+                    raise e
 
-        # Only keep the AI response content
+        # Extract response
         if hasattr(ai_raw, "content"):
             ai_response = ai_raw.content
         elif isinstance(ai_raw, dict) and "output" in ai_raw:
@@ -1016,11 +1023,13 @@ class ProductAssistantAgent:
         else:
             ai_response = str(ai_raw)
 
-        # Handle API errors in response
+        # Handle errors in response content
         if "invalid response" in ai_response.lower() or "api" in ai_response.lower():
             return "网络连接出现问题，请稍后重试或检查API密钥是否正确。"
             
         return ai_response
+
+
 
 # ===================== GLOBAL AGENT INSTANCE =====================
 agent_instance = ProductAssistantAgent(agent_llm=agent)
@@ -1051,7 +1060,6 @@ async def main_function(user_input: str) -> str:
       checkApiKey();
 
     async function sendToPyodide() {
-    alert('Button clicked! Starting processing...');  // Existing - confirms entry
     
     if (isStreaming) {
         // If already streaming, cancel the current stream
@@ -1063,32 +1071,25 @@ async def main_function(user_input: str) -> str:
         const cursor = document.querySelector('.typing-cursor');
         if (cursor) cursor.remove();
         isStreaming = false;
-        alert('Alert 1: Streaming canceled (if any)');  // Temp: Check if this shows
     }
     
     const userInput = document.getElementById("inputBox").value;
     if (!userInput.trim()) {
-        alert('Alert 2: Empty input - exiting');  // Temp
         return;
     }
     
-    alert('Alert 3: Got user input - about to log it');  // Temp: Before logOutput
     
     logOutput("👤 用户: " + userInput, "user");
-    alert('Alert 4: User message logged to output');  // Temp: After logOutput
     
     // Disable input during processing
     document.getElementById("inputBox").value = "";
     document.getElementById("inputBox").disabled = true;
     document.querySelector('button').disabled = true;
-    alert('Alert 5: Input disabled and cleared');  // Temp
     
     // Show initial status
     showStatus("🤖 正在处理您的请求 <span class='dot-flashing'></span>");
-    alert('Alert 6: Initial status shown');  // Temp
     
     try {
-        alert('Alert 7: Entering try block');  // Temp
         
         // Check which embedding mode to use
         let embeddingMode = window.APP_CONFIG.EMBEDDING_MODE || "local";
@@ -1099,12 +1100,10 @@ async def main_function(user_input: str) -> str:
         console.log("Mobile detected - forcing local embedding mode");
         }
         
-        alert('Alert 8: Embedding mode set to ' + embeddingMode);  // Temp
-        
+
         if (embeddingMode === "transformersjs" && window.embeddingGenerator) {
         // Use Transformers.js to generate embeddings
         showStatus("🧠 正在使用 Transformers.js 生成嵌入 <span class='dot-flashing'></span>");
-        alert('Alert 9: Starting Transformers.js embedding');  // Temp
         
         // Generate embedding vector
         const output = await window.embeddingGenerator(userInput, { pooling: 'mean', normalize: true });
@@ -1112,42 +1111,35 @@ async def main_function(user_input: str) -> str:
         
         // Pass embedding vector to Pyodide
         pyodide.globals.set("js_embedding", embeddingArray);
-        alert('Alert 10: Transformers.js embedding complete');  // Temp
+
         } else if (embeddingMode === "openai") {
         // Use OpenAI to generate embeddings
         showStatus("🧠 正在使用 OpenAI API 生成嵌入 <span class='dot-flashing'></span>");
-        alert('Alert 11: Starting OpenAI embedding');  // Temp
         
         try {
             const embeddingArray = await getOpenAIEmbedding(userInput);
             // Pass embedding vector to Pyodide
             pyodide.globals.set("js_openai_embedding", embeddingArray);
-            alert('Alert 12: OpenAI embedding complete');  // Temp
         } catch (error) {
             console.error("Failed to get OpenAI embedding:", error);
             // Fall back to local mode
             showStatus("⚠️ OpenAI嵌入失败，使用本地模式");
-            alert('Alert 13: OpenAI failed - falling back');  // Temp
         }
         }
         
-        alert('Alert 14: Embedding done - about to call Python');  // Temp
         
         // Process user input
         const result = await pyodide.runPythonAsync(`
             await main_function(${JSON.stringify(userInput)})
         `);
         
-        alert('Alert 15: Python execution complete');  // Temp
         
         // Clear status
         hideStatus();
         
         // Start streaming the response
         streamOutput("🤖 助手: " + result, "assistant");
-        alert('Alert 16: Response streamed');  // Temp
     } catch (err) {
-        alert('Alert 17: Caught error - ' + err.message);  // Temp: Will show if exception
         // Clear status
         hideStatus();
         
@@ -1157,7 +1149,6 @@ async def main_function(user_input: str) -> str:
         document.querySelector('button').disabled = false;
     }
     
-    alert('Alert 18: Function ending');  // Temp: If reaches end
     }
 
       document.getElementById("inputBox").addEventListener("keydown", function(event) {
