@@ -341,7 +341,7 @@
         
         // Use a lighter model for mobile devices with quantization
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-        const modelName = 'Xenova/all-MiniLM-L6-v2'; // Lightweight model for mobile
+        const modelName = 'Xenova/all-MiniLM-L6-v2___'; // Lightweight model for mobile
         
         // Show loading indicator for Transformers.js
         document.getElementById('transformersLoading').style.display = 'block';
@@ -480,7 +480,8 @@
             },
             body: JSON.stringify({
               input: text,
-              model: "text-embedding-ada-002"
+              model: "text-embedding-3-small",
+              dimensions: 384
             })
           });
           
@@ -825,51 +826,64 @@ try:
 except:
     docs_store = [Document(page_content="No data available", metadata={})]  # Fallback
 
+
+
+
 def get_embedding(text: str):
     """Get embedding based on mode"""
     updateStatus("🔍 正在生成嵌入向量...")
     try:
-        if EMBEDDING_MODE == "transformersjs" and "js_embedding" in globals():
-            # Use Transformers.js embedding from JavaScript
-            import numpy as np
-            emb = np.array(js_embedding, dtype=np.float32)
-            # Normalize
-            norm = np.linalg.norm(emb)
-            if norm > 0:
-                emb /= norm
-            return emb
-        elif EMBEDDING_MODE == "openai" and "js_openai_embedding" in globals():
-            # Use OpenAI embedding from JavaScript
-            import numpy as np
-            emb = np.array(js_openai_embedding, dtype=np.float32)
-            # Normalize
-            norm = np.linalg.norm(emb)
-            if norm > 0:
-                emb /= norm
-            return emb
-        else:
-            # Fallback to simple embedding for mobile
-            import numpy as np
-            # Simple hash-based embedding for mobile fallback
-            words = text.lower().split()
-            emb = np.zeros(384, dtype=np.float32)
-            count = 0
-            for word in words:
-                if len(word) > 2:  # Skip very short words
-                    seed = hash(word) % 1000
-                    np.random.seed(seed)
-                    emb += np.random.rand(384).astype(np.float32) - 0.5
-                    count += 1
-            if count > 0:
-                emb /= count
+        if EMBEDDING_MODE == "transformersjs":
+            try:
+                # Use Transformers.js embedding from JavaScript
+                import numpy as np
+                emb = np.array(js_embedding, dtype=np.float32)
+                # Normalize
                 norm = np.linalg.norm(emb)
                 if norm > 0:
                     emb /= norm
-            return emb
+                return emb
+            except NameError:
+                print("[Warning] js_embedding not available, falling back")
+                pass  # Fall through to next
+        elif EMBEDDING_MODE == "openai":
+            try:
+                # Use OpenAI embedding from JavaScript
+                import numpy as np
+                emb = np.array(js_openai_embedding, dtype=np.float32)
+                # Normalize
+                norm = np.linalg.norm(emb)
+                if norm > 0:
+                    emb /= norm
+                return emb
+            except NameError:
+                print("[Warning] js_openai_embedding not available, falling back")
+                pass  # Fall through to next
+        
+        # Fallback to simple embedding only if above fails (e.g., no JS var set)
+        import numpy as np
+        # Simple hash-based embedding for mobile fallback
+        words = text.lower().split()
+        emb = np.zeros(384, dtype=np.float32)
+        count = 0
+        for word in words:
+            if len(word) > 2:  # Skip very short words
+                seed = hash(word) % 1000
+                np.random.seed(seed)
+                emb += np.random.rand(384).astype(np.float32) - 0.5
+                count += 1
+        if count > 0:
+            emb /= count
+            norm = np.linalg.norm(emb)
+            if norm > 0:
+                emb /= norm
+        return emb
     except Exception as e:
         print(f"[Embedding Error] {e}")
         return np.zeros(vectors.shape[1], dtype=np.float32) if vectors.size > 0 else np.zeros(384, dtype=np.float32)
 
+        
+    
 def query_kb(query: str, k: int = 3):
     """Query the knowledge base"""
     updateStatus("📚 正在搜索知识库...")
@@ -932,27 +946,32 @@ class ProductAssistantAgent:
     def __init__(self, agent_llm):
         self.agent = agent_llm
 
-    def is_input_relevant(self, user_input: str, threshold=0.2):
+    def is_input_relevant(self, user_input: str, threshold=0):
         updateStatus("🔍 正在检查查询相关性...")
         q_vec = get_embedding(user_input)
         
-        # If no vectors available, assume input is relevant
         if vectors.size == 0:
+            print("[Debug] Vectors empty, assuming relevant")
             return True
             
-        vecs = vectors.astype(np.float32)  # ensure numeric
-
+        vecs = vectors.astype(np.float32)
+        print(f"[Debug] q_vec shape: {q_vec.shape}, vecs shape: {vecs.shape}")
+        
         if q_vec.shape[0] != vecs.shape[1]:
+            print("[Debug] Shape mismatch!")
             return False
 
         try:
             updateStatus("📊 正在计算相似度分数...")
             sims = np.dot(q_vec, vecs.T)
+            print(f"[Debug] sims shape: {sims.shape}, max_sim: {np.max(sims)}")
             if sims.size == 0:
                 return False
             max_sim = float(np.max(sims))
+            print(f"[Debug] max_sim {max_sim} >= {threshold}: {max_sim >= float(threshold)}")
             return max_sim >= float(threshold)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError) as e:
+            print(f"[Debug] Sim error: {e}")
             return False
 
     async def process_message(self, message: str):
@@ -1044,6 +1063,7 @@ async def main_function(user_input: str) -> str:
             
             try {
               const embeddingArray = await getOpenAIEmbedding(userInput);
+              console.log(embeddingArray.length);
               // Pass embedding vector to Pyodide
               pyodide.globals.set("js_openai_embedding", embeddingArray);
             } catch (error) {
