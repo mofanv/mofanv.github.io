@@ -466,6 +466,9 @@
       
       // Function to use OpenAI embeddings
       async function getOpenAIEmbedding(text) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
+
         const openaiKey = window.APP_CONFIG.OPENAI_API_KEY;
         if (!openaiKey) {
           throw new Error("No OpenAI API key available");
@@ -474,6 +477,7 @@
         try {
           const response = await fetch('https://api.openai.com/v1/embeddings', {
             method: 'POST',
+            signal: controller.signal,
             headers: {
               'Authorization': `Bearer ${openaiKey}`,
               'Content-Type': 'application/json',
@@ -484,6 +488,7 @@
               dimensions: 384
             })
           });
+          clearTimeout(timeoutId);
           
           if (!response.ok) {
             throw new Error(`OpenAI API error: ${response.status}`);
@@ -492,7 +497,10 @@
           const data = await response.json();
           return data.data[0].embedding;
         } catch (error) {
-          console.error("OpenAI embedding error:", error);
+          clearTimeout(timeoutId);
+          if (error.name === 'AbortError') {
+            throw new Error("OpenAI embedding timeout");
+          }
           throw error;
         }
       }
@@ -656,6 +664,7 @@
         const JS_TAVILY_API_KEY = window.APP_CONFIG.TAVILY_API_KEY;
         const JS_OPENAI_API_KEY = window.APP_CONFIG.OPENAI_API_KEY || "";
         const JS_EMBEDDING_MODE = window.APP_CONFIG.EMBEDDING_MODE;
+        window.APP_CONFIG.LLM_TIMEOUT = isMobile ? 180 : 60;
         
         // Initialize Pyodide with a progress callback
         updateStatus("🔄 正在加载Pyodide...");
@@ -798,7 +807,7 @@ EMBEDDING_MODE = os.getenv("EMBEDDING_MODE", "local")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
 if LLM_MODE == "deepseek":
-    llm = ChatDeepSeek(model="deepseek-chat", timeout=60)
+    llm = ChatDeepSeek(model="deepseek-chat", timeout=int(os.getenv("LLM_TIMEOUT", "60")))
     print("Using DeepSeek as the Agent LLM...")
 else:
     raise ValueError(f"Unsupported LLM_MODE: {LLM_MODE}")
@@ -937,7 +946,7 @@ agent = initialize_agent(
     agent=AgentType.CHAT_CONVERSATIONAL_REACT_DESCRIPTION,
     memory=memory,
     verbose=False,  # Reduced verbosity for mobile
-    max_iterations=3,  # Limit iterations for mobile
+    max_iterations=2,  # Limit iterations for mobile
     early_stopping_method="generate"
 )
 
@@ -946,7 +955,7 @@ class ProductAssistantAgent:
     def __init__(self, agent_llm):
         self.agent = agent_llm
 
-    def is_input_relevant(self, user_input: str, threshold=0):
+    def is_input_relevant(self, user_input: str, threshold=0.05):
         updateStatus("🔍 正在检查查询相关性...")
         q_vec = get_embedding(user_input)
         
@@ -978,29 +987,40 @@ class ProductAssistantAgent:
         if not self.is_input_relevant(message):
             return "抱歉，我不太理解您的问题。可以请您描述得更清楚吗？"
 
-        # Run agent
+        # Run agent with retries
         updateStatus("🧠 正在思考如何回答...")
-        try:
-            ai_raw = self.agent.invoke({"input": message})
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                ai_raw = self.agent.invoke({"input": message})
+                break  # Success, exit loop
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    wait_time = 2 ** attempt  # Exponential backoff: 1s, 2s, 4s
+                    print(f"[Retry {attempt+1}] LLM call failed: {str(e)}. Waiting {wait_time}s...")
+                    import asyncio
+                    await asyncio.sleep(wait_time)
+                    continue
+                else:
+                    # Final failure
+                    error_msg = str(e)
+                    if "timeout" in error_msg.lower() or "api" in error_msg.lower():
+                        return "DeepSeek API响应较慢，请稍后重试或检查网络连接。"
+                    return f"处理请求时出错: {error_msg}"
 
-            # Only keep the AI response content
-            if hasattr(ai_raw, "content"):
-                ai_response = ai_raw.content
-            elif isinstance(ai_raw, dict) and "output" in ai_raw:
-                ai_response = ai_raw["output"]
-            else:
-                ai_response = str(ai_raw)
+        # Only keep the AI response content
+        if hasattr(ai_raw, "content"):
+            ai_response = ai_raw.content
+        elif isinstance(ai_raw, dict) and "output" in ai_raw:
+            ai_response = ai_raw["output"]
+        else:
+            ai_response = str(ai_raw)
 
-            # Handle API errors
-            if "invalid response" in ai_response.lower() or "api" in ai_response.lower():
-                return "网络连接出现问题，请稍后重试或检查API密钥是否正确。"
-                
-            return ai_response
-        except Exception as e:
-            error_msg = str(e)
-            if "invalid response" in error_msg.lower() or "api" in error_msg.lower():
-                return "DeepSeek API连接出现问题，请检查网络连接和API密钥。"
-            return f"处理请求时出错: {error_msg}"
+        # Handle API errors in response
+        if "invalid response" in ai_response.lower() or "api" in ai_response.lower():
+            return "网络连接出现问题，请稍后重试或检查API密钥是否正确。"
+            
+        return ai_response
 
 # ===================== GLOBAL AGENT INSTANCE =====================
 agent_instance = ProductAssistantAgent(agent_llm=agent)
@@ -1018,6 +1038,11 @@ async def main_function(user_input: str) -> str:
 
       // === Chat UI functions ===
       async function sendToPyodide() {
+
+        if (isMobile && userInput.length > 20) {  // Rough heuristic for complex queries
+        showStatus("⚠️ 移动设备处理较慢，请耐心等待...");
+        }
+
         if (isStreaming) {
           // If already streaming, cancel the current stream
           if (currentStream) {
