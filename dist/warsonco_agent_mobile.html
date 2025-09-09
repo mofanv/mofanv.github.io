@@ -156,6 +156,50 @@
             display: block;
         }
         
+        /* OpenAI API Key Form */
+        #openaiKeyForm {
+            display: none;
+            margin-top: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 500px;
+        }
+        #openaiKeyInput {
+            width: 100%;
+            padding: 14px;
+            margin: 12px 0;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            font-size: 16px;
+            background: white;
+            -webkit-appearance: none;
+        }
+        #submitOpenaiKey {
+            padding: 14px 20px;
+            background: #10a37f;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+        }
+        #submitOpenaiKey:active {
+            background: #0d8c6c;
+        }
+        .openai-key-label {
+            font-size: 16px;
+            margin-bottom: 12px;
+            display: block;
+        }
+        .openai-key-info {
+            font-size: 13px;
+            color: #aaa;
+            margin-top: 8px;
+        }
+        
         /* Performance warning */
         .performance-warning {
             background: #f39c12;
@@ -271,6 +315,14 @@
             <input type="password" id="apiKeyInput" placeholder="sk-xxxxxxxxxxxxxxxx" />
             <button id="submitApiKey">提交</button>
         </div>
+        
+        <!-- OpenAI API Key Input Form -->
+        <div id="openaiKeyForm">
+            <span class="openai-key-label">🔑 需要OpenAI API密钥用于嵌入向量:</span>
+            <input type="password" id="openaiKeyInput" placeholder="sk-xxxxxxxxxxxxxxxx" />
+            <button id="submitOpenaiKey">提交</button>
+            <div class="openai-key-info">Transformers.js加载失败，需要使用OpenAI的嵌入API作为备用方案</div>
+        </div>
     </div>
 
     <!-- Transformers.js loading indicator -->
@@ -283,6 +335,10 @@
     </div>
 
     <script type="module">
+        // Save OpenAI key globally for checking
+        window.openaiKeyAvailable = false;
+        window.needOpenaiKey = false;
+        
         // Use a lighter model for mobile devices with quantization
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         const modelName = 'Xenova/all-MiniLM-L6-v2'; // Lightweight model for mobile
@@ -353,7 +409,7 @@
                 document.getElementById('transformersLoading').style.display = 'none';
                 const loadingMessage = document.getElementById('loadingMessage');
                 if (loadingMessage) {
-                    loadingMessage.innerHTML = 'Transformers.js加载超时，使用备用模式 <span class="dot-flashing"></span>';
+                    loadingMessage.innerHTML = 'Transformers.js加载超时，将尝试使用备用模式 <span class="dot-flashing"></span>';
                 }
                 resolve(false);
             }, isMobile ? 90000 : 45000); // 90 seconds timeout on mobile, 45 on desktop
@@ -366,13 +422,33 @@
                 console.log("Transformers.js initialized successfully");
             } else {
                 console.warn("Transformers.js initialization failed or timed out");
-                // If Transformers.js fails, we'll handle it in the main initialization
+                // Check if OpenAI key is available in config
+                checkOpenAIKey();
             }
         }).catch(error => {
             console.error("Error in Transformers.js initialization:", error);
             window.transformersInitialized = false;
             document.getElementById('transformersLoading').style.display = 'none';
+            // Check if OpenAI key is available
+            checkOpenAIKey();
         });
+        
+        function checkOpenAIKey() {
+            // Wait for config to load
+            if (!window.APP_CONFIG) {
+                setTimeout(checkOpenAIKey, 100);
+                return;
+            }
+            
+            const openaiKey = window.APP_CONFIG.OPENAI_API_KEY;
+            if (openaiKey && openaiKey !== "your_openai_api_key_here") {
+                window.openaiKeyAvailable = true;
+                console.log("OpenAI API key found in config, will use for embeddings");
+            } else {
+                window.needOpenaiKey = true;
+                console.log("No OpenAI API key found, will prompt user if needed");
+            }
+        }
     </script>
 
     <script type="text/javascript">
@@ -385,7 +461,40 @@
       let isStreaming = false;
       let currentStream = null;
       let apiKeyProvided = false;
+      let openaiKeyProvided = false;
       let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      
+      // Function to use OpenAI embeddings
+      async function getOpenAIEmbedding(text) {
+        const openaiKey = window.APP_CONFIG.OPENAI_API_KEY;
+        if (!openaiKey) {
+          throw new Error("No OpenAI API key available");
+        }
+        
+        try {
+          const response = await fetch('https://api.openai.com/v1/embeddings', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${openaiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              input: text,
+              model: "text-embedding-ada-002"
+            })
+          });
+          
+          if (!response.ok) {
+            throw new Error(`OpenAI API error: ${response.status}`);
+          }
+          
+          const data = await response.json();
+          return data.data[0].embedding;
+        } catch (error) {
+          console.error("OpenAI embedding error:", error);
+          throw error;
+        }
+      }
       
       // Function to update status from Python
       function updateStatus(message) {
@@ -443,6 +552,34 @@
           document.getElementById('submitApiKey').click();
         }
       });
+      
+      // Handle OpenAI API key submission
+      document.getElementById('submitOpenaiKey').addEventListener('click', function() {
+        const apiKey = document.getElementById('openaiKeyInput').value.trim();
+        if (apiKey) {
+          // Set the OpenAI API key in the config
+          if (!window.APP_CONFIG) window.APP_CONFIG = {};
+          window.APP_CONFIG.OPENAI_API_KEY = apiKey;
+          window.openaiKeyAvailable = true;
+          openaiKeyProvided = true;
+          
+          // Hide the form and continue initialization
+          document.getElementById('openaiKeyForm').style.display = 'none';
+          document.getElementById('loadingMessage').textContent = '🤖 正在初始化智能体...';
+          
+          // Continue with main initialization
+          continueMainInit();
+        } else {
+          alert('请输入有效的OpenAI API密钥');
+        }
+      });
+
+      // Also allow Enter key to submit OpenAI key
+      document.getElementById('openaiKeyInput').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+          document.getElementById('submitOpenaiKey').click();
+        }
+      });
 
       async function main(){
         // Show loading overlay initially
@@ -479,12 +616,45 @@
           document.getElementById('transformersLoading').style.display = 'none';
           
           if (!window.transformersInitialized) {
-            console.warn("Transformers.js failed to initialize, falling back to local API mode");
-            JS_EMBEDDING_MODE = "local";
-            // Update the config to reflect the change
-            window.APP_CONFIG.EMBEDDING_MODE = "local";
+            console.warn("Transformers.js failed to initialize, checking for OpenAI fallback");
+            
+            // Check if OpenAI key is available
+            if (window.openaiKeyAvailable) {
+              JS_EMBEDDING_MODE = "openai";
+              window.APP_CONFIG.EMBEDDING_MODE = "openai";
+              console.log("Using OpenAI embeddings as fallback");
+            } else if (window.needOpenaiKey) {
+              // Need to prompt for OpenAI key
+              document.getElementById('openaiKeyForm').style.display = 'block';
+              document.getElementById('loadingMessage').textContent = '需要OpenAI API密钥用于嵌入向量';
+              
+              // Wait for OpenAI key to be provided
+              while (!openaiKeyProvided) {
+                await new Promise(r => setTimeout(r, 100));
+              }
+              
+              JS_EMBEDDING_MODE = "openai";
+              window.APP_CONFIG.EMBEDDING_MODE = "openai";
+            } else {
+              // Fall back to local mode
+              JS_EMBEDDING_MODE = "local";
+              window.APP_CONFIG.EMBEDDING_MODE = "local";
+              console.log("Using local embeddings as fallback");
+            }
           }
         }
+        
+        // Continue with initialization
+        await continueMainInit();
+      }
+      
+      async function continueMainInit() {
+        const JS_LLM_MODE = window.APP_CONFIG.LLM_MODE;
+        const JS_DEEPSEEK_API_KEY = window.APP_CONFIG.DEEPSEEK_API_KEY;
+        const JS_HUGGINGFACEHUB_API_TOKEN = window.APP_CONFIG.HUGGINGFACEHUB_API_TOKEN;
+        const JS_TAVILY_API_KEY = window.APP_CONFIG.TAVILY_API_KEY;
+        const JS_OPENAI_API_KEY = window.APP_CONFIG.OPENAI_API_KEY || "";
+        const JS_EMBEDDING_MODE = window.APP_CONFIG.EMBEDDING_MODE;
         
         // Initialize Pyodide with a progress callback
         updateStatus("🔄 正在加载Pyodide...");
@@ -550,11 +720,14 @@
             import os
             os.environ['DEEPSEEK_API_KEY'] = "${JS_DEEPSEEK_API_KEY}"
             os.environ['HUGGINGFACEHUB_API_TOKEN'] = "${JS_HUGGINGFACEHUB_API_TOKEN}"
+            os.environ['OPENAI_API_KEY'] = "${JS_OPENAI_API_KEY}"
             os.environ['LLM_MODE'] = "${JS_LLM_MODE}"
             os.environ['EMBEDDING_MODE'] = "${JS_EMBEDDING_MODE}"
             print("API Key set:", os.environ['DEEPSEEK_API_KEY'][:6] + "...")
             print("LLM Mode:", os.environ['LLM_MODE'])
             print("Embedding Mode:", os.environ['EMBEDDING_MODE'])
+            if os.environ.get('OPENAI_API_KEY'):
+                print("OpenAI Key available:", os.environ['OPENAI_API_KEY'][:6] + "...")
         `);
         
         // Now run the main Python code
@@ -621,6 +794,7 @@ from langchain_deepseek import ChatDeepSeek
 # ===================== LLM SELECTION =====================
 LLM_MODE = os.getenv("LLM_MODE", "deepseek")
 EMBEDDING_MODE = os.getenv("EMBEDDING_MODE", "local")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
 if LLM_MODE == "deepseek":
     llm = ChatDeepSeek(model="deepseek-chat", timeout=60)
@@ -659,6 +833,15 @@ def get_embedding(text: str):
             # Use Transformers.js embedding from JavaScript
             import numpy as np
             emb = np.array(js_embedding, dtype=np.float32)
+            # Normalize
+            norm = np.linalg.norm(emb)
+            if norm > 0:
+                emb /= norm
+            return emb
+        elif EMBEDDING_MODE == "openai" and "js_openai_embedding" in globals():
+            # Use OpenAI embedding from JavaScript
+            import numpy as np
+            emb = np.array(js_openai_embedding, dtype=np.float32)
             # Normalize
             norm = np.linalg.norm(emb)
             if norm > 0:
@@ -855,6 +1038,19 @@ async def main_function(user_input: str) -> str:
             
             // Pass embedding vector to Pyodide
             pyodide.globals.set("js_embedding", embeddingArray);
+          } else if (embeddingMode === "openai") {
+            // Use OpenAI to generate embeddings
+            showStatus("🧠 正在使用 OpenAI API 生成嵌入 <span class='dot-flashing'></span>");
+            
+            try {
+              const embeddingArray = await getOpenAIEmbedding(userInput);
+              // Pass embedding vector to Pyodide
+              pyodide.globals.set("js_openai_embedding", embeddingArray);
+            } catch (error) {
+              console.error("Failed to get OpenAI embedding:", error);
+              // Fall back to local mode
+              showStatus("⚠️ OpenAI嵌入失败，使用本地模式");
+            }
           }
           
           // Process user input
