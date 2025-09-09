@@ -32,7 +32,7 @@
             margin-bottom: 20px;
             font-size: 1.5rem;
         }
-        
+
         /* Input and button styles optimized for touch */
         .input-group {
             display: flex;
@@ -69,7 +69,7 @@
             background: #95a5a6;
             cursor: not-allowed;
         }
-        
+
         /* Output box */
         #outputBox {
             width: 100%;
@@ -257,7 +257,7 @@
             <input id="inputBox" type="text" placeholder="输入你的问题..." disabled />
             <button onclick="sendToPyodide()" disabled>发送</button>
         </div>
-        
+
         <div id="outputBox"></div>
     </div>
 
@@ -624,7 +624,7 @@ LLM_MODE = os.getenv("LLM_MODE", "deepseek")
 EMBEDDING_MODE = os.getenv("EMBEDDING_MODE", "local")
 
 if LLM_MODE == "deepseek":
-    llm = ChatDeepSeek(model="deepseek-chat", timeout=60)
+    llm = ChatDeepSeek(model="deepseek-chat", timeout=120, max_retries=2)
     print("Using DeepSeek as the Agent LLM...")
 else:
     raise ValueError(f"Unsupported LLM_MODE: {LLM_MODE}")
@@ -639,17 +639,36 @@ DOCS_FILE = "/embeddings_docs.json"
 try:
     vectors = np.load(EMBEDDINGS_FILE, allow_pickle=True)
     vectors = np.array(vectors, dtype=np.float32)
-    # Normalize vectors
-    norms = np.linalg.norm(vectors, axis=1, keepdims=True)
-    vectors /= (norms + 1e-10)
-except:
+    # Check if vectors are 2D and normalize
+    if len(vectors.shape) == 2:
+        norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+        vectors /= (norms + 1e-10)
+    else:
+        # Handle 1D array (single embedding)
+        norms = np.linalg.norm(vectors)
+        if norms > 0:
+            vectors = vectors / norms
+        vectors = vectors.reshape(1, -1)  # Make it 2D
+except Exception as e:
+    print(f"Error loading embeddings: {e}")
     vectors = np.zeros((1, 384), dtype=np.float32)  # Fallback
 
 # Load metadata/docs
 try:
     with open(DOCS_FILE, "r", encoding="utf-8") as f:
-        docs_store = [Document(page_content=d["text"], metadata=d["metadata"]) for d in json.load(f)]
-except:
+        docs_data = json.load(f)
+        docs_store = []
+        for d in docs_data:
+            # Ensure each document has proper structure
+            if isinstance(d, dict):
+                text = d.get("text", "No content")
+                metadata = d.get("metadata", {})
+                docs_store.append(Document(page_content=text, metadata=metadata))
+            else:
+                # Handle case where d might be a string or other format
+                docs_store.append(Document(page_content=str(d), metadata={}))
+except Exception as e:
+    print(f"Error loading docs: {e}")
     docs_store = [Document(page_content="No data available", metadata={})]  # Fallback
 
 def get_embedding(text: str):
@@ -660,11 +679,14 @@ def get_embedding(text: str):
             # Use Transformers.js embedding from JavaScript
             import numpy as np
             emb = np.array(js_embedding, dtype=np.float32)
+            # Ensure proper shape
+            if len(emb.shape) == 1:
+                emb = emb.reshape(1, -1)
             # Normalize
             norm = np.linalg.norm(emb)
             if norm > 0:
                 emb /= norm
-            return emb
+            return emb.flatten()  # Return 1D array for consistency
         else:
             # Fallback to simple embedding for mobile
             import numpy as np
@@ -686,24 +708,35 @@ def get_embedding(text: str):
             return emb
     except Exception as e:
         print(f"[Embedding Error] {e}")
-        return np.zeros(vectors.shape[1], dtype=np.float32) if vectors.size > 0 else np.zeros(384, dtype=np.float32)
+        # Return zero vector of appropriate dimension
+        if vectors.size > 0:
+            return np.zeros(vectors.shape[1], dtype=np.float32)
+        else:
+            return np.zeros(384, dtype=np.float32)
 
 def query_kb(query: str, k: int = 3):
     """Query the knowledge base"""
     updateStatus("📚 正在搜索知识库...")
     q_vec = get_embedding(query)
     
-    # Check if vectors are available
+    # Ensure q_vec is 1D and has the right dimension
+    if len(q_vec.shape) > 1:
+        q_vec = q_vec.flatten()
+    
+    # Check if vectors are available and have compatible dimensions
     if vectors.size == 0 or vectors.shape[1] != q_vec.shape[0]:
         updateStatus("⚠️ 知识库未加载，使用默认回复")
         return [Document(page_content="知识库暂不可用，请稍后再试", metadata={"url": "N/A"})]
     
     try:
-        sims = np.dot(q_vec, vectors.T)[0]
+        # Reshape q_vec to 2D for dot product
+        q_vec_2d = q_vec.reshape(1, -1)
+        sims = np.dot(q_vec_2d, vectors.T)[0]
         top_idx = sims.argsort()[-k:][::-1]
         updateStatus("✅ 已找到相关文档")
-        return [docs_store[i] for i in top_idx]
-    except:
+        return [docs_store[i] for i in top_idx if i < len(docs_store)]
+    except Exception as e:
+        print(f"Error querying KB: {e}")
         # Return empty results on error
         return []
 
@@ -712,16 +745,22 @@ def query_kb(query: str, k: int = 3):
 def search_knowledge(query: str):
     """检索知识库相关信息"""
     updateStatus("🔎 正在搜索知识库...")
-    docs = query_kb(query, k=3)
-    return [f"{d.page_content}\\n来源: {d.metadata.get('url','未知来源')}" for d in docs]
+    try:
+        docs = query_kb(query, k=3)
+        return [f"{d.page_content}\\n来源: {d.metadata.get('url','未知来源')}" for d in docs]
+    except Exception as e:
+        return f"搜索知识库时出错: {str(e)}"
 
 @tool
 def get_price_info(query: str):
     """检索价格相关信息"""
     updateStatus("💰 正在搜索价格信息...")
-    docs = query_kb(query, k=3)
-    price_docs = [d for d in docs if "价" in d.page_content or "￥" in d.page_content]
-    return [f"{d.page_content}\\n来源: {d.metadata.get('url','未知来源')}" for d in price_docs] if price_docs else "未找到相关价格信息"
+    try:
+        docs = query_kb(query, k=3)
+        price_docs = [d for d in docs if "价" in d.page_content or "￥" in d.page_content or "price" in d.page_content.lower()]
+        return [f"{d.page_content}\\n来源: {d.metadata.get('url','未知来源')}" for d in price_docs] if price_docs else "未找到相关价格信息"
+    except Exception as e:
+        return f"搜索价格信息时出错: {str(e)}"
 
 # ===================== AGENT SETUP =====================
 tools = [search_knowledge, get_price_info]
@@ -742,7 +781,8 @@ agent = initialize_agent(
     memory=memory,
     verbose=False,  # Reduced verbosity for mobile
     max_iterations=3,  # Limit iterations for mobile
-    early_stopping_method="generate"
+    early_stopping_method="generate",
+    handle_parsing_errors=True  # Better error handling
 )
 
 # ===================== AGENT INTERFACE =====================
@@ -758,19 +798,25 @@ class ProductAssistantAgent:
         if vectors.size == 0:
             return True
             
-        vecs = vectors.astype(np.float32)  # ensure numeric
+        # Ensure vectors are 2D and q_vec is 1D
+        vecs = vectors.astype(np.float32)
+        if len(q_vec.shape) > 1:
+            q_vec = q_vec.flatten()
 
         if q_vec.shape[0] != vecs.shape[1]:
             return False
 
         try:
             updateStatus("📊 正在计算相似度分数...")
-            sims = np.dot(q_vec, vecs.T)
+            # Reshape q_vec to 2D for dot product
+            q_vec_2d = q_vec.reshape(1, -1)
+            sims = np.dot(q_vec_2d, vecs.T)
             if sims.size == 0:
                 return False
             max_sim = float(np.max(sims))
             return max_sim >= float(threshold)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, Exception) as e:
+            print(f"Similarity calculation error: {e}")
             return False
 
     async def process_message(self, message: str):
@@ -850,12 +896,18 @@ async def main_function(user_input: str) -> str:
             // Use Transformers.js to generate embeddings
             showStatus("🧠 正在使用 Transformers.js 生成嵌入 <span class='dot-flashing'></span>");
             
-            // Generate embedding vector
-            const output = await window.embeddingGenerator(userInput, { pooling: 'mean', normalize: true });
-            const embeddingArray = Array.from(output.data);
-            
-            // Pass embedding vector to Pyodide
-            pyodide.globals.set("js_embedding", embeddingArray);
+            try {
+              // Generate embedding vector
+              const output = await window.embeddingGenerator(userInput, { pooling: 'mean', normalize: true });
+              const embeddingArray = Array.from(output.data);
+              
+              // Pass embedding vector to Pyodide
+              pyodide.globals.set("js_embedding", embeddingArray);
+            } catch (embedError) {
+              console.error("Transformers.js embedding error:", embedError);
+              // Fallback to local embedding
+              pyodide.globals.set("js_embedding", []);
+            }
           }
           
           // Process user input
