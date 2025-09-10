@@ -369,7 +369,19 @@
         };
         
         window.embeddingGenerator = null;
-        
+
+        // async function checkNetwork() {
+        //     try {
+        //         const testResponse = await fetch('https://api.deepseek.com', { method: 'HEAD', timeout: 5000 });
+        //         if (!testResponse.ok) throw new Error('Network test failed');
+        //         console.log('Network to DeepSeek API is healthy');
+        //         return true;
+        //     } catch (error) {
+        //         console.error('Network check failed:', error);
+        //         return false;
+        //     }
+        // }
+
         async function initTransformers() {
             try {
                 console.log('Loading Transformers.js pipeline with mobile optimization...');
@@ -945,13 +957,14 @@ memory = ConversationBufferMemory(
 )
 
 updateStatus("🤖 正在初始化智能体...")
+is_mobile = globals().get("JS_IS_MOBILE", False)
 agent = initialize_agent(
     tools,
     llm,
     agent=AgentType.CHAT_CONVERSATIONAL_REACT_DESCRIPTION,
     memory=memory,
     verbose=False,  # Reduced verbosity for mobile
-    max_iterations=2,  # Limit iterations for mobile
+    max_iterations=1 if is_mobile else 2,  # Reduce on mobile
     early_stopping_method="generate"
 )
 
@@ -993,26 +1006,33 @@ class ProductAssistantAgent:
         if not self.is_input_relevant(message):
             return "抱歉，我不太理解您的问题。可以请您描述得更清楚吗？"
 
-        # Run agent with retries for timeouts
         updateStatus("🧠 正在思考如何回答...")
         max_retries = 5
         for attempt in range(max_retries):
             try:
+                # Add explicit timeout to llm call if possible
                 ai_raw = self.agent.invoke({"input": message})
                 break  # Success
             except Exception as e:
                 error_str = str(e).lower()
-                if "timeout" in error_str or "api" in error_str or "connection" in error_str:
+                if "timeout" in error_str or "connection" in error_str:
                     if attempt < max_retries - 1:
-                        wait_time = 2 ** attempt  # Backoff: 1s, 2s, 4s
-                        print(f"[Retry {attempt+1}/{max_retries}] DeepSeek timeout: {e}. Waiting {wait_time}s...")
+                        wait_time = 2 ** attempt
+                        print(f"[Retry {attempt+1}/{max_retries}] Timeout: {e}. Waiting {wait_time}s...")
                         import asyncio
-                        await asyncio.sleep(wait_time)  # Pyodide supports asyncio.sleep
+                        await asyncio.sleep(wait_time)
+                        continue
+                elif "invalid response" in error_str or "json" in error_str:
+                    print(f"[Error] Invalid API response: {e}. Likely network issue.")
+                    if attempt < max_retries - 1:
+                        wait_time = 2 ** attempt
+                        print(f"[Retry {attempt+1}/{max_retries}] Invalid response. Waiting {wait_time}s...")
+                        import asyncio
+                        await asyncio.sleep(wait_time)
                         continue
                     else:
-                        return "DeepSeek API响应较慢，请稍后重试或检查网络连接。建议使用Wi-Fi并简化查询。"
+                        return "API响应无效，请检查网络或API密钥。建议使用Wi-Fi重试。"
                 else:
-                    # Non-timeout errors (e.g., invalid key) - no retry
                     raise e
 
         # Extract response
@@ -1060,87 +1080,95 @@ async def main_function(user_input: str) -> str:
       checkApiKey();
 
     async function sendToPyodide() {
-    
-    if (isStreaming) {
-        // If already streaming, cancel the current stream
-        if (currentStream) {
-        clearInterval(currentStream);
-        currentStream = null;
+        
+        if (isStreaming) {
+            // If already streaming, cancel the current stream
+            if (currentStream) {
+            clearInterval(currentStream);
+            currentStream = null;
+            }
+            // Remove the cursor
+            const cursor = document.querySelector('.typing-cursor');
+            if (cursor) cursor.remove();
+            isStreaming = false;
         }
-        // Remove the cursor
-        const cursor = document.querySelector('.typing-cursor');
-        if (cursor) cursor.remove();
-        isStreaming = false;
-    }
-    
-    const userInput = document.getElementById("inputBox").value;
-    if (!userInput.trim()) {
-        return;
-    }
-    
-    
-    logOutput("👤 用户: " + userInput, "user");
-    
-    // Disable input during processing
-    document.getElementById("inputBox").value = "";
-    document.getElementById("inputBox").disabled = true;
-    document.querySelector('button').disabled = true;
-    
-    // Show initial status
-    showStatus("🤖 正在处理您的请求 <span class='dot-flashing'></span>");
-    
-    try {
         
-        // Check which embedding mode to use
-        let embeddingMode = window.APP_CONFIG.EMBEDDING_MODE || "local";
-
-        if (embeddingMode === "transformersjs" && window.embeddingGenerator) {
-        // Use Transformers.js to generate embeddings
-        showStatus("🧠 正在使用 Transformers.js 生成嵌入 <span class='dot-flashing'></span>");
+        const userInput = document.getElementById("inputBox").value;
+        if (!userInput.trim()) {
+            return;
+        }
         
-        // Generate embedding vector
-        const output = await window.embeddingGenerator(userInput, { pooling: 'mean', normalize: true });
-        const embeddingArray = Array.from(output.data);
         
-        // Pass embedding vector to Pyodide
-        pyodide.globals.set("js_embedding", embeddingArray);
-
-        } else if (embeddingMode === "openai") {
-        // Use OpenAI to generate embeddings
-        showStatus("🧠 正在使用 OpenAI API 生成嵌入 <span class='dot-flashing'></span>");
+        logOutput("👤 用户: " + userInput, "user");
+        
+        // Disable input during processing
+        document.getElementById("inputBox").value = "";
+        document.getElementById("inputBox").disabled = true;
+        document.querySelector('button').disabled = true;
+        
+        // Show initial status
+        showStatus("🤖 正在处理您的请求 <span class='dot-flashing'></span>");
         
         try {
-            const embeddingArray = await getOpenAIEmbedding(userInput);
+            
+            // Check which embedding mode to use
+            let embeddingMode = window.APP_CONFIG.EMBEDDING_MODE || "local";
+
+            if (embeddingMode === "transformersjs" && window.embeddingGenerator) {
+            // Use Transformers.js to generate embeddings
+            showStatus("🧠 正在使用 Transformers.js 生成嵌入 <span class='dot-flashing'></span>");
+            
+            // Generate embedding vector
+            const output = await window.embeddingGenerator(userInput, { pooling: 'mean', normalize: true });
+            const embeddingArray = Array.from(output.data);
+            
             // Pass embedding vector to Pyodide
-            pyodide.globals.set("js_openai_embedding", embeddingArray);
-        } catch (error) {
-            console.error("Failed to get OpenAI embedding:", error);
-            // Fall back to local mode
-            showStatus("⚠️ OpenAI嵌入失败，使用本地模式");
+            pyodide.globals.set("js_embedding", embeddingArray);
+
+            } else if (embeddingMode === "openai") {
+            // Use OpenAI to generate embeddings
+            showStatus("🧠 正在使用 OpenAI API 生成嵌入 <span class='dot-flashing'></span>");
+            
+            try {
+                const embeddingArray = await getOpenAIEmbedding(userInput);
+                // Pass embedding vector to Pyodide
+                pyodide.globals.set("js_openai_embedding", embeddingArray);
+            } catch (error) {
+                console.error("Failed to get OpenAI embedding:", error);
+                // Fall back to local mode
+                showStatus("⚠️ OpenAI嵌入失败，使用本地模式");
+            }
+            }
+            
+            // const networkOk = await checkNetwork();
+            // if (!networkOk) {
+            //     hideStatus();
+            //     logOutput("⚠️ 网络连接不稳定，请连接Wi-Fi并重试。", "error");
+            //     document.getElementById("inputBox").disabled = false;
+            //     document.querySelector('button').disabled = false;
+            //     return;
+            // }
+            
+            // Process user input
+            const result = await pyodide.runPythonAsync(`
+                await main_function(${JSON.stringify(userInput)})
+            `);
+            
+            
+            // Clear status
+            hideStatus();
+            
+            // Start streaming the response
+            streamOutput("🤖 助手: " + result, "assistant");
+        } catch (err) {
+            // Clear status
+            hideStatus();
+            
+            logOutput("⚠️ 错误: " + err, "error");
+            // Re-enable input on error
+            document.getElementById("inputBox").disabled = false;
+            document.querySelector('button').disabled = false;
         }
-        }
-        
-        
-        // Process user input
-        const result = await pyodide.runPythonAsync(`
-            await main_function(${JSON.stringify(userInput)})
-        `);
-        
-        
-        // Clear status
-        hideStatus();
-        
-        // Start streaming the response
-        streamOutput("🤖 助手: " + result, "assistant");
-    } catch (err) {
-        // Clear status
-        hideStatus();
-        
-        logOutput("⚠️ 错误: " + err, "error");
-        // Re-enable input on error
-        document.getElementById("inputBox").disabled = false;
-        document.querySelector('button').disabled = false;
-    }
     
     }
 
