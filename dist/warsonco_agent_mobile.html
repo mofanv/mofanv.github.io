@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-    <title>产品客服机器人 - 移动优化版</title>
+    <title>Warsonco客服机器人</title>
     <script src="https://cdn.jsdelivr.net/pyodide/v0.28.2/full/pyodide.js"></script>
     <script src="config.js"></script>
     <style>
@@ -73,7 +73,8 @@
         /* Output box */
         #outputBox {
             width: 100%;
-            min-height: 200px;
+            height: 60vh; /* 使用视口高度而不是最小高度 */
+            max-height: 60vh; /* 限制最大高度 */
             padding: 16px;
             font-size: 15px;
             border-radius: 10px;
@@ -81,9 +82,10 @@
             background: #111;
             color: #0f0;
             white-space: pre-wrap;
-            overflow: auto;
+            overflow-y: auto; /* 确保垂直滚动 */
             -webkit-overflow-scrolling: touch;
             line-height: 1.5;
+            resize: none; /* 防止用户调整大小 */
         }
         
         /* Status indicators */
@@ -247,14 +249,9 @@
         
         /* Responsive adjustments */
         @media (max-width: 480px) {
-            body {
-                padding: 12px;
-            }
-            h2 {
-                font-size: 1.3rem;
-            }
-            #inputBox, button {
-                padding: 12px 14px;
+            #outputBox {
+                height: 50vh;
+                max-height: 50vh;
             }
         }
         
@@ -295,7 +292,7 @@
     </div>
     
     <div class="container">
-        <h2>产品客服机器人</h2>
+        <h2>Warsonco客服机器人</h2>
         
         <div class="input-group">
             <input id="inputBox" type="text" placeholder="输入你的问题..." disabled />
@@ -948,12 +945,37 @@ def get_price_info(query: str):
 # ===================== AGENT SETUP =====================
 tools = [search_knowledge, get_price_info]
 
-system_prompt = "你是一个专业助手，基于知识库回答用户问题。如果问题不清楚，请礼貌请求澄清。"
+system_prompt = """你是【华盛控科技智能客服助手】，职责是为潜在客户和合作伙伴提供专业、简洁、可靠的支持。
+
+### 你的能力与边界
+1. **信息来源**  
+   - 优先使用知识库（官网内容、产品手册、常见问题、售后政策等）回答。  
+   - 如果知识库没有相关信息，请坦诚说明，并礼貌引导用户联系人工客服。  
+
+2. **回答规则**  
+   - 回答要清晰、简洁、分点列出，便于客户快速理解。  
+   - 仅提供与公司、产品、服务相关的内容，不回答无关话题。  
+   - 回答时避免冗长和空话。  
+
+3. **交互风格**  
+   - 保持专业、友好、耐心。  
+   - 如果问题模糊，请主动追问澄清。  
+   - 优先使用客户输入的语言回答（中文或英文）。  
+
+4. **场景引导**  
+   - **产品咨询**：可推荐产品、列出参数对比，并引导用户下载资料或联系销售。  
+   - **售后支持**：提供排查建议；如果超出能力范围，提示报修或联系售后。  
+   - **方案/报价需求**：收集需求信息（行业、产能、联系方式等），并建议后续人工对接。  
+   - **联系方式**：可提供公司电话、邮箱、在线客服入口等。  
+
+5. **额外要求**  
+   - 在涉及购买、报价、方案定制时，要引导用户留下联系方式。  
+   - 遇到重复问题时，保持耐心并尝试换种表述方式。  
+"""
 
 memory = ConversationBufferMemory(
     memory_key="chat_history",
     return_messages=True,
-    system_message=system_prompt
 )
 
 updateStatus("🤖 正在初始化智能体...")
@@ -973,7 +995,7 @@ class ProductAssistantAgent:
     def __init__(self, agent_llm):
         self.agent = agent_llm
 
-    def is_input_relevant(self, user_input: str, threshold=0.05):
+    def is_input_relevant(self, user_input: str, threshold=0.2):
         updateStatus("🔍 正在检查查询相关性...")
         q_vec = get_embedding(user_input)
         
@@ -1011,7 +1033,10 @@ class ProductAssistantAgent:
         for attempt in range(max_retries):
             try:
                 # Add explicit timeout to llm call if possible
-                ai_raw = self.agent.invoke({"input": message})
+                ai_raw = agent.invoke({
+                    "input": f"""{system_prompt}\n\n用户问题: {message}""",
+                    "chat_history": memory.load_memory_variables({})["chat_history"]
+                })
                 break  # Success
             except Exception as e:
                 error_str = str(e).lower()
@@ -1179,73 +1204,75 @@ async def main_function(user_input: str) -> str:
           }
       });
 
-      function logOutput(message, type="assistant") {
-          const out = document.getElementById("outputBox");
+        function logOutput(message, type="assistant") {
+            const out = document.getElementById("outputBox");
+            
+            // 创建消息元素
+            const span = document.createElement("span");
+            span.textContent = message;
 
-          // Create a span element for message
-          const span = document.createElement("span");
-          span.textContent = message;
+            if (type === "user") {
+                span.style.color = "#1E90FF";
+                span.style.fontWeight = "bold";
+            } else if (type === "assistant") {
+                span.style.color = "#32CD32";
+            } else if (type === "error") {
+                span.style.color = "#FF4500";
+                span.style.fontWeight = "bold";
+            }
 
-          if (type === "user") {
-              span.style.color = "#1E90FF"; // blue for 用户
-              span.style.fontWeight = "bold";
-          } else if (type === "assistant") {
-              span.style.color = "#32CD32"; // green for 助手
-          } else if (type === "error") {
-              span.style.color = "#FF4500"; // red for errors
-              span.style.fontWeight = "bold";
-          }
+            out.appendChild(span);
+            out.appendChild(document.createElement("br"));
+            out.appendChild(document.createElement("br"));
 
-          out.appendChild(span);
-          out.appendChild(document.createElement("br")); // line break
-          out.appendChild(document.createElement("br")); // extra spacing
-
-          out.scrollTop = out.scrollHeight; // auto-scroll
-      }
+            // 确保滚动到底部
+            out.scrollTop = out.scrollHeight;
+        }
       
-      function streamOutput(message, type) {
-          isStreaming = true;
-          const out = document.getElementById("outputBox");
-          
-          // Create a span for the message
-          const span = document.createElement("span");
-          if (type === "assistant") {
-              span.style.color = "#32CD32"; // green for 助手
-          }
-          
-          out.appendChild(span);
-          
-          // Create a blinking cursor
-          const cursor = document.createElement("span");
-          cursor.className = "typing-cursor";
-          out.appendChild(cursor);
-          
-          let i = 0;
-          currentStream = setInterval(() => {
-              if (i < message.length) {
-                  span.textContent += message[i];
-                  i++;
-                  out.scrollTop = out.scrollHeight; // auto-scroll
-              } else {
-                  // Finished streaming
-                  clearInterval(currentStream);
-                  currentStream = null;
-                  isStreaming = false;
-                  
-                  // Remove the cursor
-                  cursor.remove();
-                  
-                  // Add line breaks
-                  out.appendChild(document.createElement("br"));
-                  out.appendChild(document.createElement("br"));
-                  
-                  // Re-enable input
-                  document.getElementById("inputBox").disabled = false;
-                  document.querySelector('button').disabled = false;
-                  document.getElementById("inputBox").focus();
-              }
-          }, 30); // Adjust speed as needed (milliseconds per character)
-      }
+
+        function streamOutput(message, type) {
+            isStreaming = true;
+            const out = document.getElementById("outputBox");
+            
+            // 创建消息元素
+            const span = document.createElement("span");
+            if (type === "assistant") {
+                span.style.color = "#32CD32";
+            }
+            
+            out.appendChild(span);
+            
+            // 创建光标
+            const cursor = document.createElement("span");
+            cursor.className = "typing-cursor";
+            out.appendChild(cursor);
+            
+            let i = 0;
+            currentStream = setInterval(() => {
+                if (i < message.length) {
+                    span.textContent += message[i];
+                    i++;
+                    // 每次添加字符时都滚动到底部
+                    out.scrollTop = out.scrollHeight;
+                } else {
+                    clearInterval(currentStream);
+                    currentStream = null;
+                    isStreaming = false;
+                    
+                    cursor.remove();
+                    
+                    out.appendChild(document.createElement("br"));
+                    out.appendChild(document.createElement("br"));
+                    
+                    document.getElementById("inputBox").disabled = false;
+                    document.querySelector('button').disabled = false;
+                    document.getElementById("inputBox").focus();
+                    
+                    // 最终滚动到底部
+                    out.scrollTop = out.scrollHeight;
+                }
+            }, 30);
+        }
       
       function showStatus(message) {
           // Remove any existing status
