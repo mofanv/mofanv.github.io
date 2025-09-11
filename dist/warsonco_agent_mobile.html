@@ -866,6 +866,8 @@ if OPENAI_API_KEY:
 
 print(f"Using embedding mode: {EMBEDDING_MODE}")
 
+use_openai = False
+
 # ===================== KNOWLEDGE BASE =====================
 EMBEDDINGS_FILE = "/embeddings.npy"
 DOCS_FILE = "/embeddings_docs.json"
@@ -1064,45 +1066,13 @@ class ProductAssistantAgent:
 
 
     async def process_message(self, message: str):
+        global use_openai
         if not self.is_input_relevant(message):
             return "抱歉，我不太理解您的问题。可以请您描述得更清楚吗？"
 
         updateStatus("🧠 正在思考如何回答...")
-        max_retries = 5
-        success = False
-        ai_raw = None
-        for attempt in range(max_retries):
-            try:
-                # Add explicit timeout to llm call if possible
-                ai_raw = self.agent.invoke({
-                    "input": f"""{system_prompt}\n\n用户问题: {message}""",
-                    "chat_history": memory.load_memory_variables({})["chat_history"]
-                })
-                success = True
-                break
-            except Exception as e:
-                error_str = str(e).lower()
-                if "timeout" in error_str or "connection" in error_str:
-                    if attempt < max_retries - 1:
-                        wait_time = 2 ** attempt
-                        print(f"[Retry {attempt+1}/{max_retries}] Timeout: {e}. Waiting {wait_time}s...")
-                        import asyncio
-                        await asyncio.sleep(wait_time)
-                        continue
-                elif "invalid response" in error_str or "json" in error_str:
-                    if attempt < max_retries - 1:
-                        wait_time = 2 ** attempt
-                        print(f"[Retry {attempt+1}/{max_retries}] Invalid response. Waiting {wait_time}s...")
-                        import asyncio
-                        await asyncio.sleep(wait_time)
-                        continue
-                    else:
-                        break  # Will trigger fallback below
-                else:
-                    raise e
-
-        if not success and self.fallback_llm:
-            updateStatus("⚠️ DeepSeek API 失败，切换到 OpenAI...")
+        if use_openai and self.fallback_llm:
+            updateStatus("🧠 使用 OpenAI 思考...")
             fallback_agent = initialize_agent(
                 tools,
                 self.fallback_llm,
@@ -1121,9 +1091,67 @@ class ProductAssistantAgent:
             except Exception as fallback_e:
                 print(f"[Fallback Error] {fallback_e}")
                 return "备用 OpenAI API 也出现问题，请检查网络并稍后重试。"
+        else:
+            max_retries = 3
+            success = False
+            ai_raw = None
+            for attempt in range(max_retries):
+                try:
+                    # Add explicit timeout to llm call if possible
+                    ai_raw = self.agent.invoke({
+                        "input": f"""{system_prompt}\n\n用户问题: {message}""",
+                        "chat_history": memory.load_memory_variables({})["chat_history"]
+                    })
+                    success = True
+                    break
+                except Exception as e:
+                    error_str = str(e).lower()
+                    if "timeout" in error_str or "connection" in error_str:
+                        if attempt < max_retries - 1:
+                            wait_time = 2 ** attempt
+                            print(f"[Retry {attempt+1}/{max_retries}] Timeout: {e}. Waiting {wait_time}s...")
+                            import asyncio
+                            await asyncio.sleep(wait_time)
+                            continue
+                    elif "invalid response" in error_str or "json" in error_str:
+                        if attempt < max_retries - 1:
+                            wait_time = 2 ** attempt
+                            print(f"[Retry {attempt+1}/{max_retries}] Invalid response. Waiting {wait_time}s...")
+                            import asyncio
+                            await asyncio.sleep(wait_time)
+                            continue
+                        else:
+                            break  # Will trigger fallback below
+                    else:
+                        raise e
+
+            if not success:
+                use_openai = True
+                if self.fallback_llm:
+                    updateStatus("⚠️ DeepSeek API 失败，切换到 OpenAI...")
+                    fallback_agent = initialize_agent(
+                        tools,
+                        self.fallback_llm,
+                        agent=AgentType.CHAT_CONVERSATIONAL_REACT_DESCRIPTION,
+                        memory=memory,
+                        verbose=False,
+                        max_iterations=1 if is_mobile else 2,
+                        early_stopping_method="generate"
+                    )
+                    try:
+                        ai_raw = fallback_agent.invoke({
+                            "input": f"""{system_prompt}\n\n用户问题: {message}""",
+                            "chat_history": memory.load_memory_variables({})["chat_history"]
+                        })
+                        success = True
+                    except Exception as fallback_e:
+                        print(f"[Fallback Error] {fallback_e}")
+                        return "备用 OpenAI API 也出现问题，请检查网络并稍后重试。"
+                else:
+                    return "NEED_OPENAI_KEY"
 
         if not success:
-            return "NEED_OPENAI_KEY"
+            return "API响应无效，请检查网络或API密钥。建议使用Wi-Fi重试。"
 
         # Extract response
         if hasattr(ai_raw, "content"):
