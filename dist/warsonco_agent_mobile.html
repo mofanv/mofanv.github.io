@@ -727,7 +727,7 @@
         await pyodide.loadPackage("micropip");
 
         // Install only essential packages for mobile 
-        const packagesToInstall = ["requests==2.32.5", "numpy", "langchain", "langchain_deepseek"];
+        const packagesToInstall = ["requests==2.32.5", "numpy", "langchain", "langchain_deepseek", "langchain_openai"];
 
         console.log(await pyodide.runPythonAsync(`
             import sys
@@ -812,19 +812,26 @@ from langchain.tools import tool
 from langchain.memory import ConversationBufferMemory
 from langchain.agents import initialize_agent, AgentType
 from langchain_deepseek import ChatDeepSeek
+from langchain_openai import ChatOpenAI
 
 # ===================== LLM SELECTION =====================
 LLM_MODE = os.getenv("LLM_MODE", "deepseek")
 EMBEDDING_MODE = os.getenv("EMBEDDING_MODE", "local")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
+timeout_val = int(os.getenv("LLM_TIMEOUT", "60"))  # Defaults to 60 if not set
+
 if LLM_MODE == "deepseek":
-    timeout_val = int(os.getenv("LLM_TIMEOUT", "60"))  # Defaults to 60 if not set
     llm = ChatDeepSeek(model="deepseek-chat", timeout=timeout_val)
     print(f"Using DeepSeek with timeout: {timeout_val}s")
     print("Using DeepSeek as the Agent LLM...")
 else:
     raise ValueError(f"Unsupported LLM_MODE: {LLM_MODE}")
+
+fallback_llm = None
+if OPENAI_API_KEY:
+    fallback_llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0, request_timeout=timeout_val)
+    print("OpenAI fallback LLM initialized")
 
 print(f"Using embedding mode: {EMBEDDING_MODE}")
 
@@ -992,8 +999,9 @@ agent = initialize_agent(
 
 # ===================== AGENT INTERFACE =====================
 class ProductAssistantAgent:
-    def __init__(self, agent_llm):
+    def __init__(self, agent_llm, fallback_llm=None):
         self.agent = agent_llm
+        self.fallback_llm = fallback_llm
 
     def is_input_relevant(self, user_input: str, threshold=0.2):
         updateStatus("🔍 正在检查查询相关性...")
@@ -1030,14 +1038,17 @@ class ProductAssistantAgent:
 
         updateStatus("🧠 正在思考如何回答...")
         max_retries = 5
+        success = False
+        ai_raw = None
         for attempt in range(max_retries):
             try:
                 # Add explicit timeout to llm call if possible
-                ai_raw = agent.invoke({
+                ai_raw = self.agent.invoke({
                     "input": f"""{system_prompt}\n\n用户问题: {message}""",
                     "chat_history": memory.load_memory_variables({})["chat_history"]
                 })
-                break  # Success
+                success = True
+                break
             except Exception as e:
                 error_str = str(e).lower()
                 if "timeout" in error_str or "connection" in error_str:
@@ -1048,7 +1059,6 @@ class ProductAssistantAgent:
                         await asyncio.sleep(wait_time)
                         continue
                 elif "invalid response" in error_str or "json" in error_str:
-                    print(f"[Error] Invalid API response: {e}. Likely network issue.")
                     if attempt < max_retries - 1:
                         wait_time = 2 ** attempt
                         print(f"[Retry {attempt+1}/{max_retries}] Invalid response. Waiting {wait_time}s...")
@@ -1056,9 +1066,33 @@ class ProductAssistantAgent:
                         await asyncio.sleep(wait_time)
                         continue
                     else:
-                        return "API响应无效，请检查网络或API密钥。建议使用Wi-Fi重试。"
+                        break  # Will trigger fallback below
                 else:
                     raise e
+
+        if not success and self.fallback_llm:
+            updateStatus("⚠️ DeepSeek API 失败，切换到 OpenAI...")
+            fallback_agent = initialize_agent(
+                tools,
+                self.fallback_llm,
+                agent=AgentType.CHAT_CONVERSATIONAL_REACT_DESCRIPTION,
+                memory=memory,
+                verbose=False,
+                max_iterations=1 if is_mobile else 2,
+                early_stopping_method="generate"
+            )
+            try:
+                ai_raw = fallback_agent.invoke({
+                    "input": f"""{system_prompt}\n\n用户问题: {message}""",
+                    "chat_history": memory.load_memory_variables({})["chat_history"]
+                })
+                success = True
+            except Exception as fallback_e:
+                print(f"[Fallback Error] {fallback_e}")
+                return "备用 OpenAI API 也出现问题，请检查网络并稍后重试。"
+
+        if not success:
+            return "API响应无效，请检查网络或API密钥。建议使用Wi-Fi重试。"
 
         # Extract response
         if hasattr(ai_raw, "content"):
@@ -1077,7 +1111,7 @@ class ProductAssistantAgent:
 
 
 # ===================== GLOBAL AGENT INSTANCE =====================
-agent_instance = ProductAssistantAgent(agent_llm=agent)
+agent_instance = ProductAssistantAgent(agent_llm=agent, fallback_llm=fallback_llm)
 
 # ===================== MAIN FUNCTION =====================
 async def main_function(user_input: str) -> str:
