@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -472,6 +473,8 @@
       let apiKeyProvided = false;
       let openaiKeyProvided = false;
       let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      let lastUserInput = "";
+      window.llmTimeout = isMobile ? 180 : 60;
       
       // Function to use OpenAI embeddings
       async function getOpenAIEmbedding(text) {
@@ -572,7 +575,7 @@
       });
       
       // Handle OpenAI API key submission
-      document.getElementById('submitOpenaiKey').addEventListener('click', function() {
+      document.getElementById('submitOpenaiKey').addEventListener('click', async function() {
         const apiKey = document.getElementById('openaiKeyInput').value.trim();
         if (apiKey) {
           // Set the OpenAI API key in the config
@@ -581,12 +584,40 @@
           window.openaiKeyAvailable = true;
           openaiKeyProvided = true;
           
-          // Hide the form and continue initialization
-          document.getElementById('openaiKeyForm').style.display = 'none';
-          document.getElementById('loadingMessage').textContent = '🤖 正在初始化智能体...';
+          await pyodide.runPythonAsync(`
+            import os
+            os.environ['OPENAI_API_KEY'] = "${apiKey}"
+          `);
           
-          // Continue with main initialization
-          continueMainInit();
+          // Hide the form
+          document.getElementById('openaiKeyForm').style.display = 'none';
+          
+          if (document.getElementById('loadingOverlay').style.display === 'flex' && window.transformersInitialized === false) {
+            // Init phase for embeddings
+            document.getElementById('loadingMessage').textContent = '🤖 正在初始化智能体...';
+            continueMainInit();
+          } else {
+            // Runtime fallback for LLM
+            document.getElementById('loadingOverlay').style.display = 'none';
+            hideStatus();
+            
+            await pyodide.runPythonAsync(`
+              from langchain_openai import ChatOpenAI
+              fallback_llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0, request_timeout=${window.llmTimeout})
+              agent_instance.fallback_llm = fallback_llm
+              print("Fallback LLM set")
+            `);
+            
+            showStatus("使用OpenAI重试 <span class='dot-flashing'></span>");
+            
+            const retryResult = await pyodide.runPythonAsync(`
+              await main_function(${JSON.stringify(lastUserInput)})
+            `);
+            
+            hideStatus();
+            
+            streamOutput("🤖 助手: " + retryResult, "assistant");
+          }
         } else {
           alert('请输入有效的OpenAI API密钥');
         }
@@ -1092,7 +1123,7 @@ class ProductAssistantAgent:
                 return "备用 OpenAI API 也出现问题，请检查网络并稍后重试。"
 
         if not success:
-            return "API响应无效，请检查网络或API密钥。建议使用Wi-Fi重试。"
+            return "NEED_OPENAI_KEY"
 
         # Extract response
         if hasattr(ai_raw, "content"):
@@ -1157,6 +1188,7 @@ async def main_function(user_input: str) -> str:
             return;
         }
         
+        lastUserInput = userInput;
         
         logOutput("👤 用户: " + userInput, "user");
         
@@ -1213,6 +1245,13 @@ async def main_function(user_input: str) -> str:
                 await main_function(${JSON.stringify(userInput)})
             `);
             
+            if (result === "NEED_OPENAI_KEY") {
+              document.getElementById('openaiKeyForm').style.display = 'block';
+              document.getElementById('loadingMessage').textContent = 'DeepSeek API 失效，需要OpenAI API密钥作为备用';
+              document.getElementById('loadingOverlay').style.display = 'flex';
+              document.getElementById('openaiKeyForm').querySelector('.openai-key-info').textContent = 'DeepSeek API 返回无效响应，需要OpenAI作为备用';
+              return;
+            }
             
             // Clear status
             hideStatus();
@@ -1332,3 +1371,4 @@ async def main_function(user_input: str) -> str:
     </script>
 </body>
 </html>
+```
