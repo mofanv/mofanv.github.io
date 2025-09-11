@@ -316,7 +316,7 @@
         
         <!-- OpenAI API Key Input Form -->
         <div id="openaiKeyForm">
-            <span class="openai-key-label">🔑 需要OpenAI API密钥用于嵌入向量:</span>
+            <span class="openai-key-label">🔑 需要OpenAI API密钥用于数据检索:</span>
             <input type="password" id="openaiKeyInput" placeholder="sk-xxxxxxxxxxxxxxxx" />
             <button id="submitOpenaiKey">提交</button>
             <div class="openai-key-info">Transformers.js加载失败，需要使用OpenAI的嵌入API作为备用方案</div>
@@ -603,7 +603,7 @@
             
             await pyodide.runPythonAsync(`
               from langchain_openai import ChatOpenAI
-              fallback_llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0, request_timeout=${window.llmTimeout})
+              fallback_llm = ChatOpenAI(model="gpt-4.1-nano", temperature=0, request_timeout=${window.llmTimeout}) # gpt-4o-mini
               agent_instance.fallback_llm = fallback_llm
               print("Fallback LLM set")
             `);
