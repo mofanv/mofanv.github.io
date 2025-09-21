@@ -314,10 +314,9 @@
         
         <!-- OpenAI API Key Input Form -->
         <div id="openaiKeyForm">
-            <span class="openai-key-label">🔑 需要OpenAI API密钥用于数据检索:</span>
+            <span class="openai-key-label">🔑 请输入您的OpenAI API密钥:</span>
             <input type="password" id="openaiKeyInput" placeholder="sk-xxxxxxxxxxxxxxxx" />
             <button id="submitOpenaiKey">提交</button>
-            <div class="openai-key-info">Transformers.js加载失败，需要使用OpenAI的嵌入API作为备用方案</div>
         </div>
     </div>
 
@@ -417,7 +416,7 @@
                 document.getElementById('transformersLoading').style.display = 'none';
                 const loadingMessage = document.getElementById('loadingMessage');
                 if (loadingMessage) {
-                    loadingMessage.innerHTML = 'Transformers.js加载超时，将尝试使用备用模式 <span class="dot-flashing"></span>';
+                    loadingMessage.innerHTML = '将尝试使用备用模式 <span class="dot-flashing"></span>';
                 }
                 resolve(false);
             }, isMobile ? 90000 : 45000); // 90 seconds timeout on mobile, 45 on desktop
@@ -673,7 +672,7 @@
             } else if (window.needOpenaiKey) {
               // Need to prompt for OpenAI key
               document.getElementById('openaiKeyForm').style.display = 'block';
-              document.getElementById('loadingMessage').textContent = '需要OpenAI API密钥用于嵌入向量';
+              document.getElementById('loadingMessage').textContent = '本地向量嵌入失败，需要OpenAI API密钥以继续';
               
               // Wait for OpenAI key to be provided
               while (!openaiKeyProvided) {
@@ -1297,9 +1296,9 @@ async def main_function(user_input: str) -> str:
             
             if (result === "NEED_OPENAI_KEY") {
               document.getElementById('openaiKeyForm').style.display = 'block';
-              document.getElementById('loadingMessage').textContent = 'DeepSeek API 失效，需要OpenAI API密钥作为备用';
+              document.getElementById('loadingMessage').textContent = 'DeepSeek无法访问，需要OpenAI API密钥才能继续';
               document.getElementById('loadingOverlay').style.display = 'flex';
-              document.getElementById('openaiKeyForm').querySelector('.openai-key-info').textContent = 'DeepSeek API 返回无效响应，需要OpenAI作为备用';
+              // document.getElementById('openaiKeyForm').querySelector('.openai-key-info').textContent = 'DeepSeek API 返回无效响应，需要OpenAI作为备用';
               return;
             }
             
