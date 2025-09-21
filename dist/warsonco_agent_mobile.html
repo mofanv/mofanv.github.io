@@ -356,7 +356,7 @@
                 const now = Date.now();
                 // Throttle progress updates to avoid UI jank
                 if (now - lastProgressUpdate > 200) {
-                    const percent = Math.round(data.progress * 10);
+                    const percent = Math.min(100, Math.round(data.progress));
                     document.getElementById('transformersProgress').textContent = `${percent}%`;
                     document.getElementById('progressFill').style.width = `${percent}%`;
                     lastProgressUpdate = now;
