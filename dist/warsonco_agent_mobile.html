@@ -798,36 +798,60 @@
         // Clear any status messages in the chat output
         hideStatus();
       }
-      
-      // Function to fetch with progress tracking
-      async function fetchWithProgress(url, filename, description) {
+
+        // Function to fetch with progress tracking
+        async function fetchWithProgress(url, filename, description) {
         const response = await fetch(url);
-        const contentLength = response.headers.get('content-length');
-        const total = parseInt(contentLength, 10);
-        let loaded = 0;
-        
-        // Create a reader to track progress
         const reader = response.body.getReader();
         const chunks = [];
-        
+        let loaded = 0;
+        let startTime = Date.now();
+        let lastUpdateTime = startTime;
+        let lastLoaded = 0;
+
         while(true) {
-          const {done, value} = await reader.read();
-          if (done) break;
-          
-          chunks.push(value);
-          loaded += value.length;
-          
-          // Update progress every 10% or 1MB
-          if (total && (loaded / total > 0.1 || loaded % (1024 * 1024) === 0)) {
-            const percent = total ? Math.round((loaded / total) * 100) : 0;
-            updateStatus(`📥 正在加载${description}... ${percent}%`);
-          }
+            const {done, value} = await reader.read();
+            if (done) break;
+            
+            chunks.push(value);
+            loaded += value.length;
+            
+            const currentTime = Date.now();
+            const timeElapsed = (currentTime - lastUpdateTime) / 1000; // in seconds
+            
+            // Update every 500ms or when 1MB is downloaded
+            if (timeElapsed > 0.5 || loaded - lastLoaded >= 1024 * 1024) {
+            const downloadSpeed = (loaded - lastLoaded) / timeElapsed; // bytes per second
+            const speedText = formatBytes(downloadSpeed) + '/s';
+            
+            updateStatus(`📥 正在加载${description}... ${formatBytes(loaded)} (${speedText})`);
+            
+            lastUpdateTime = currentTime;
+            lastLoaded = loaded;
+            }
         }
         
+        // Final download complete message
+        const totalTime = (Date.now() - startTime) / 1000;
+        const averageSpeed = loaded / totalTime;
+        const speedText = formatBytes(averageSpeed) + '/s';
+        updateStatus(`✅ ${description}加载完成! ${formatBytes(loaded)} (平均速度: ${speedText})`);
+
         // Combine chunks
         const blob = new Blob(chunks);
         return new Response(blob);
-      }
+        }
+
+        // Helper function to format bytes to human-readable format
+        function formatBytes(bytes, decimals = 2) {
+        if (bytes === 0) return '0 B';
+        
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(decimals)) + ' ' + sizes[i];
+        }
       
       // Get appropriate Python code based on embedding mode
       function getPythonCode(embeddingMode) {
@@ -1090,7 +1114,7 @@ class ProductAssistantAgent:
                 print(f"[Fallback Error] {fallback_e}")
                 return "备用 OpenAI API 也出现问题，请检查网络并稍后重试。"
         else:
-            max_retries = 3
+            max_retries = 2
             success = False
             ai_raw = None
             for attempt in range(max_retries):
