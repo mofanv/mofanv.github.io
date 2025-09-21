@@ -601,7 +601,7 @@
             
             await pyodide.runPythonAsync(`
               from langchain_openai import ChatOpenAI
-              fallback_llm = ChatOpenAI(model="gpt-4.1-nano", temperature=0, request_timeout=${window.llmTimeout}) # gpt-4o-mini
+              fallback_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, request_timeout=${window.llmTimeout}) # gpt-4o-mini / gpt-4.1-nano
               agent_instance.fallback_llm = fallback_llm
               print("Fallback LLM set")
             `);
