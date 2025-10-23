@@ -5,6 +5,8 @@ permalink: /publications/
 order: 2
 ---
 ### 2025
+
+
 Xiaohu Du, **Fan Mo**, Ming Wen, Tu Gu, Huadi Zheng, Hai Jin, Jie Shi. "Multi-Turn Jailbreaking Large Language Models via Attention Shifting". *[The 39th Annual AAAI Conference on Artificial Intelligence](https://aaai.org/conference/aaai/aaai-25/)*. Paper on the way!
 
 ### 2024
