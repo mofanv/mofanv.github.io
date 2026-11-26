@@ -12,13 +12,15 @@ I finished my PhD in [Systems and Algorithms Laboratory (SysAL)](https://www.imp
 I enjoy building new things and have worked on a diverse range of projects. My current research focuses on ensuring the controllability of physical agent systems, making their trajectories align with user intent. I also have expertise in content safety, particularly in developing frameworks to evaluate the safety performance of LLMs and VLMs. My previous research is on data privacy and trustworthiness in edge machine learning, enabling users to train models without leaking private information by leveraging techniques such as Trusted Execution Environments. I have extensive experience in user studies, usability evaluation and testing, UX/UI design, human behavior on wearable/mobile devices, and social network sites. I enjoy working in interdisciplinary fields and appreciate ''beautiful'' concepts in both science and the humanities.
 
 
+[Google Scholar](https://scholar.google.com/citations?user=VZToybAAAAAJ) · [GitHub](https://github.com/mofanv) · [Email](mailto:mofan1992@gmail.com)
+
 ### Selected Papers
+
+Xiaohu Du, **Fan Mo**, Ming Wen, Tu Gu, Huadi Zheng, Hai Jin, Jie Shi. "Multi-Turn Jailbreaking Large Language Models via Attention Shifting." *AAAI 2025.* [Paper](https://ojs.aaai.org/index.php/AAAI/article/download/34553/36708)
 
 **Fan Mo**, Zahra Tarkhani, Hamed Haddadi. "Machine Learning with Confidential Computing: A Systematization of Knowledge." *[ACM Computing Surveys](https://dl.acm.org/journal/csur).*[Paper](https://dl.acm.org/doi/10.1145/3670007) (2023 Impact Factor: 23.8)
 
 **Fan Mo**, Hamed Haddadi, Kleomenis Katevas, Eduard Marin, Diego Perino, Nicolas Kourtellis. "PPFL: Privacy-preserving Federated Learning with Trusted Execution Environments." Accepted to *[ACM MobiSys 2021](https://www.sigmobile.org/mobisys/2021/), Mars, Solar System, Milky Way, June 2021.* [Paper](http://arxiv.org/abs/2104.14380), [GetMobile Highlight](https://dl.acm.org/doi/abs/10.1145/3529706.3529715), [Codes](https://github.com/mofanv/PPFL), [Teaser Video](https://www.youtube.com/watch?v=pBtsA0NGDzs), [Full Video](https://www.youtube.com/watch?v=r5yxjo5V1L8) (**Best Paper Award!**)
-
-**Fan Mo**, Ali Shahin Shamsabadi, Kleomenis Katevas, Soteris Demetriou, Ilias Leontiadis, Andrea Cavallaro, Hamed Haddadi. "DarkneTZ: Towards Model Privacy on the Edge using Trusted Execution Environments". *[ACM MobiSys 2020](https://www.sigmobile.org/mobisys/2020/), Toronto, Canada, June 2020.* [arXiv](https://arxiv.org/abs/2004.05703), [Codes](https://github.com/mofanv/darknetp), [Video](https://www.youtube.com/watch?v=mEAlONq3MU4) (Acceptance Rate: 19.4%)
 
 **Fan Mo**, and Jia Zhou. "Adapting smartwatch interfaces to hand gestures during movements: Offset models and the C-shaped pattern of tapping". *Journal of Ambient Intelligence and Humanized Computing (2020)*. [Paper](https://rdcu.be/b7Du5), [Code and data](https://github.com/mofanv/use-smartwatch-movement), [Invention Grant - Eng.](https://patents.google.com/patent/CN108446019B/en) , [发明专利 - 中文](https://patentimages.storage.googleapis.com/95/6a/8f/1fefc3e194b5a6/CN108446019B.pdf)
 

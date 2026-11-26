@@ -6,52 +6,38 @@ order: 4
 ---
 
 ### Research Service
-#### Review
-* Reviewer of IEEE/ACM ToN [Transactions on Networking](https://ieeexplore.ieee.org/xpl/RecentIssue.jsp?punumber=90), 2023
-* Reviewer of IEEE IoTJ [Internet of Things Journal](https://ieee-iotj.org/), 2023
-* Reviewer of IEEE TDSC [Transactions on Dependable and Secure Computing](https://ieeexplore.ieee.org/xpl/RecentIssue.jsp?punumber=8858), 2023
-* Reviewer of IEEE TIFS [Transactions on Information Forensics & Security](https://ieeexplore.ieee.org/xpl/RecentIssue.jsp?punumber=10206), 2022
-* * Reviewer of [ACM Transactions on Internet of Things](https://dl.acm.org/journal/tiot), 2021-2022
-* Reviewer of [Human Factor](https://uk.sagepub.com/en-gb/eur/journal/human-factors), 2019
-* Reviewer of [IEEE Access](https://ieeeaccess.ieee.org/), 2018-2020
 
-#### Program
-* PC Member in [ICML 2023 Federated Learning Workshop](https://icml.cc/Conferences/2023/Schedule?showEvent=21473)
-* Publication/Video Chair and TPC in [MobiSys 2021 Workshop - Security and Privacy for Mobile AI](https://maisp.gitlab.io/), 2022
-* PC Member in [ICLR 2021 Workshop-Distributed and Private Machine Learning](https://dp-ml.github.io/2021-workshop-ICLR/) , 2022
-* Shadow PC in [IEEE S&P 2021](http://www.ieee-security.org/TC/SP2021/cfpapers.html)
-* Shadow PC in [EuroSys 2021](https://2021.eurosys.org/)
-* Assistant of Chair, [HCI Internatinal 2017](http://2017.hci.international/) - ITAP, Springer
-* Assistant of Chair, [HCI Internatinal 2016](http://2016.hci.international/) - ITAP, Springer
+My conference reviewing and committee service includes AAAI, ICLR, ACM MobiSys, IEEE S&P, and EuroSys.
 
+#### Program Committees and Chairing
 
+- Workshop program committees at [ICML 2023](https://fl-icml2023.github.io/), [ICLR 2021](https://dp-ml.github.io/2021-workshop-ICLR/), and [ACM MobiSys 2021](https://maisp.gitlab.io/committee/) (also publication and video chair at MobiSys).
+- Shadow program committee member, [IEEE Symposium on Security and Privacy](https://www.ieee-security.org/TC/SP2021/), 2021.
+- Shadow program committee member, [EuroSys](https://2021.eurosys.org/), 2021.
+- Assistant to the chair, Human Aspects of IT for the Aged Population, [HCI International 2017](http://2017.hci.international/) and [HCI International 2016](http://2016.hci.international/).
+
+#### Journal Reviewing
+
+- [IEEE/ACM Transactions on Networking](https://ieeexplore.ieee.org/xpl/RecentIssue.jsp?punumber=90), 2023.
+- [IEEE Internet of Things Journal](https://ieee-iotj.org/), 2023.
+- [IEEE Transactions on Dependable and Secure Computing](https://ieeexplore.ieee.org/xpl/RecentIssue.jsp?punumber=8858), 2023.
+- [IEEE Transactions on Information Forensics and Security](https://ieeexplore.ieee.org/xpl/RecentIssue.jsp?punumber=10206), 2022.
+- [ACM Transactions on Internet of Things](https://dl.acm.org/journal/tiot), 2021–2022.
+- [Human Factors](https://uk.sagepub.com/en-gb/eur/journal/human-factors), 2019.
+- [IEEE Access](https://ieeeaccess.ieee.org/), 2018–2020.
 
 ### Invited Talks
-* "PPFL: Privacy-preserving Federated Learning with Trusted Execution Environments", [SysML at Imperial College London](https://sysml.doc.ic.ac.uk/seminar/), Fed. 2023
 
-* "Privacy-preserving Federated Learning with Trusted Execution Environments", [Federated Learning One World (FLOW) Seminar](https://sites.google.com/view/one-world-seminar-series-flow/home), Jan. 2022
+- “PPFL: Privacy-preserving Federated Learning with Trusted Execution Environments,” [SysML Seminar, Imperial College London](https://sysml.doc.ic.ac.uk/event/seminar7/), February 2023.
+- “Privacy-preserving Federated Learning with Trusted Execution Environments,” [Federated Learning One World Seminar](https://sites.google.com/view/one-world-seminar-series-flow/home), January 2022.
+- “Privacy-preserving Machine Learning with Trusted Execution Environments,” Arm Research, July 2021.
+- “On-device Machine Learning with Trusted Environments,” [The Alan Turing Institute](https://www.turing.ac.uk/research/interest-groups/ai-resource-and-data-constrained-environments), 2021.
+- “Privacy-preserving Federated Learning with TEE,” Telefónica Research, January 2021.
+- “Model Privacy Protection at the Edge,” NetSys Lab, Stony Brook University, 2020.
 
-* "Privacy-preserving Machine Learning with Trusted Execution Environments", Arm Research - System, Cambridge, UK, Jul. 2021
+### Teaching and Community Service
 
-* "On-device Machine Learning with Trusted Environments", [AI in Constrained Environments](https://www.turing.ac.uk/research/interest-groups/ai-resource-and-data-constrained-environments), The Alan Turing Institute, UK, May 2021
-
-* "Privacy-preserving Federated Learning with TEE", Telefónica Research, Spain, Jan. 2021
-
-* "Model Privacy Protection at the Edge", NetSys Lab, Department of Computer Science, Stony Brook University, USA, Sept. 2020
-
-
-### Community Service
-* Lab leader and GTA of Sensing and IoT course at [Dyson School of Design Engineering](http://www.imperial.ac.uk/design-engineering/), Imperial College London
-(*Sept. 2018 ~ Dec. 2022*)
-
-<!--* General Teaching Space Helper at [Dyson School of Design Engineering](http://www.imperial.ac.uk/design-engineering/) (**GTA**)
-(*Sept. 2018 ~ Sept. 2019*)
--->
-* General Management in Student Affairs Office Assistant Administrator (awarded as **Excellent Manager** in 2015)
-(*Jul. 2017 ~ Sept. 2014*)
-
-* Network Marketing for Gaodi Interior Design International (**Project Manager**)
-(*Feb. 2015 ~ Mar. 2015*)
-
-* Warehouse Layout for Foxconn Technology Group (**Project Manager**)
-(*Aug. 2014 ~ Sept. 2014*)
+- Lab leader and graduate teaching assistant, Sensing and IoT, [Dyson School of Design Engineering](https://www.imperial.ac.uk/design-engineering/), Imperial College London, 2018–2022.
+- Assistant administrator, Student Affairs Office. Excellent Manager award, 2015.
+- Project manager, Network Marketing, Gaodi Interior Design International, February–March 2015.
+- Project manager, Warehouse Layout, Foxconn Technology Group, August–September 2014.
